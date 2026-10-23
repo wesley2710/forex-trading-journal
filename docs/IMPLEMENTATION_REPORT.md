@@ -22,7 +22,8 @@
 ## Configuração externa
 
 - Planilha `Forex Trading Journal Data` reutilizada.
-- O Apps Script deve ser instalado como script vinculado, receber `FOREX_JOURNAL_TOKEN` nas propriedades privadas e ser implantado como Web App.
-- Depois da implantação, a URL `/exec` deve ser registrada em `js/config.js` e o mesmo segredo informado uma vez no navegador.
+- Apps Script instalado como script vinculado e implantado como Web App na versão 1.
+- `FOREX_JOURNAL_TOKEN` configurado nas propriedades privadas do projeto.
+- URL `/exec` registrada em `js/config.js`; resta informar o segredo uma vez no navegador autorizado.
 
 O cliente OAuth e as APIs habilitadas anteriormente não são necessários para o novo frontend. Eles podem permanecer no projeto sem uso. O Apps Script não exige vincular faturamento.
