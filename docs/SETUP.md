@@ -11,6 +11,8 @@ Esta configuração não exige faturamento, Cloud Run, conta de serviço ou segr
 5. Em **Origens JavaScript autorizadas**, adicione `http://localhost:8080` e `https://SEU_USUARIO.github.io`.
 6. Não é necessário adicionar URI de redirecionamento para o fluxo de token do Google Identity Services.
 
+O frontend solicita somente `https://www.googleapis.com/auth/drive.file`; escopos de perfil não são necessários.
+
 ## 2. Frontend
 
 Edite `js/config.js`:

@@ -1,10 +1,5 @@
 const GOOGLE_IDENTITY_URL = 'https://accounts.google.com/gsi/client';
-const GOOGLE_SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'https://www.googleapis.com/auth/drive.file',
-].join(' ');
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 function loadGoogleIdentity() {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -63,10 +58,7 @@ export class AuthService extends EventTarget {
 
   async signIn() {
     await this.requestToken('consent');
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { authorization: `Bearer ${this.accessToken}` } });
-    if (!response.ok) throw new Error('Não foi possível identificar a conta Google.');
-    const profile = await response.json();
-    this.user = { id: profile.sub, email: profile.email, name: profile.name || profile.email };
+    this.user = { email: 'conta conectada', name: 'Conta Google conectada' };
     this.dispatchEvent(new CustomEvent('change', { detail: this.user }));
     return this.user;
   }

@@ -22,7 +22,7 @@
 
 - Google Sheets API e Google Drive API ativas no projeto `forex-trading-journal-512519`.
 - Cliente OAuth Web reutilizado, com `http://localhost:8080` e `https://wesley2710.github.io` como origens autorizadas.
-- Escopos não confidenciais `openid`, e-mail, perfil e `drive.file` salvos.
+- O frontend solicita somente o escopo não confidencial `drive.file`; não lê perfil, contatos ou arquivos alheios ao aplicativo.
 - Client ID público configurado em `js/config.js`.
 - Faturamento não vinculado; Cloud Run e conta de serviço não são usados.
 
