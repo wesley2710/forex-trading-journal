@@ -11,8 +11,8 @@ import { renderDashboard } from './pages/dashboard.js';
 import { renderSettings } from './pages/settings.js';
 import { renderTrades } from './pages/trades.js';
 import { LocalRepository, download, validateImport } from './repositories/local-repository.js';
-import { GoogleWorkspaceRepository } from './repositories/google-workspace-repository.js';
-import { AuthService } from './services/auth-service.js';
+import { AppsScriptRepository } from './repositories/apps-script-repository.js';
+import { AccessService } from './services/access-service.js';
 import { SyncService } from './services/sync-service.js';
 import { esc, field, opts, selectField, textArea } from './ui/html.js';
 
@@ -29,16 +29,15 @@ let formHandler = null;
 let galleryUrls = [];
 const filters = { account: 'all', from: '', to: '', firm: '', phase: '', symbol: '', strategy: '', side: '' };
 
-const auth = new AuthService(appConfig);
+const access = new AccessService(appConfig);
 let sync = null;
 let workspace = null;
-let syncStatus = appConfig.remoteEnabled ? 'aguardando conexão' : 'modo local';
-if (appConfig.remoteEnabled) {
-  workspace = new GoogleWorkspaceRepository({ getToken: () => auth.getToken(), spreadsheetTitle: appConfig.google.spreadsheetTitle });
+let syncStatus = access.connected ? 'conferindo a nuvem' : access.configured ? 'aguardando configuração' : 'modo local';
+if (access.configured) {
+  workspace = new AppsScriptRepository({ endpoint: appConfig.appsScript.endpoint, getToken: () => access.getToken(), spreadsheetUrl: appConfig.appsScript.spreadsheetUrl });
   sync = new SyncService(localRepository, workspace);
   sync.addEventListener('status', (event) => { syncStatus = event.detail.status; refreshSyncStatus(event.detail.detail); if (page === 'settings') render(); });
-  auth.addEventListener('change', () => { refreshSyncStatus(); if (page === 'settings') render(); });
-  auth.initialize().catch((error) => { syncStatus = `erro: ${error.message}`; refreshSyncStatus(); });
+  access.addEventListener('change', () => { syncStatus = access.connected ? 'conferindo a nuvem' : 'aguardando configuração'; refreshSyncStatus(); if (page === 'settings') render(); });
 }
 
 const pageMeta = {
@@ -52,8 +51,8 @@ const filteredTrades = () => activeTrades().filter((trade) => (!filters.from || 
 function toast(message) { const element = $('#toast'); element.textContent = message; element.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => element.classList.remove('show'), 3300); }
 function refreshSyncStatus(detail = '') {
   const label = $('#syncLabel'); const text = $('#syncDetail'); const dot = $('#syncDot'); if (!label) return;
-  const logged = Boolean(auth.user); label.textContent = syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando…' : logged ? 'Conectado' : 'Modo local';
-  text.textContent = detail || (logged ? `Google: ${auth.user.email}` : 'Backup local ativo; conecte sua conta Google para sincronizar.');
+  const connected = access.connected; label.textContent = syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando…' : syncStatus === 'pending' ? 'Salvo; enviando…' : syncStatus === 'conflict' ? 'Conflito de versões' : connected ? 'Automático ativo' : 'Modo local';
+  text.textContent = detail || (connected ? 'Google Planilhas e Drive conectados automaticamente.' : 'Backup local ativo; configure o acesso automático uma única vez.');
   dot.className = `status-dot ${syncStatus}`;
 }
 function refreshAccountFilter() {
@@ -63,6 +62,7 @@ function refreshAccountFilter() {
 }
 function commit(mutator, action, collection) {
   mutator(); db.audit.push({ id: uid(), action, collection, at: new Date().toISOString() }); db.audit = db.audit.slice(-500); db = localRepository.save(db); toast('Alterações salvas no backup local.'); render();
+  if (access.connected) sync.schedule(() => db, (next) => { db = next; if (page === 'settings') render(); });
 }
 function setPage(next) {
   page = next; const [title, subtitle] = pageMeta[page]; $('#pageTitle').textContent = title; $('#pageSubtitle').textContent = subtitle;
@@ -76,7 +76,7 @@ function render() {
   else if (page === 'trades') $('#app').innerHTML = renderTrades({ db, filters, accountName });
   else if (page === 'calendar') $('#app').innerHTML = renderCalendar({ trades: activeTrades(), year, month, mode: calendarMode });
   else if (page === 'analytics') { result = renderAnalytics({ trades: filteredTrades() }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.rCurve); lineChart($('#pnlChart'), result.pnlCurve); }
-  else { $('#app').innerHTML = renderSettings({ db, remoteEnabled: appConfig.remoteEnabled, signedIn: Boolean(auth.user), syncStatus, spreadsheetUrl: workspace?.spreadsheetUrl }); bindImport(); }
+  else { $('#app').innerHTML = renderSettings({ db, remoteEnabled: access.configured, connected: access.connected, syncStatus, spreadsheetUrl: workspace?.spreadsheetUrl || appConfig.appsScript?.spreadsheetUrl }); bindImport(); }
   refreshSyncStatus();
 }
 
@@ -96,7 +96,7 @@ function tradeForm(id) {
   if (!db.accounts.some((account) => !account.archived)) { toast('Cadastre uma conta ativa antes.'); setPage('accounts'); return; }
   const current = db.trades.find((trade) => trade.id === id) || { accountId: selected === 'all' ? accountOptions()[0][0] : selected, closedDate: isoDate(), openedAt: `${isoDate()}T09:00`, closedAt: `${isoDate()}T12:00`, symbol: 'EUR/USD', side: 'Compra', riskCents: 10000, plannedRewardCents: 20000, grossPnlCents: 0, feesCents: 0, swapCents: 0, commissionCents: 0, entry: '', stopLoss: '', takeProfit: '', exit: '', lots: '', strategy: '', notes: '', partialExits: [], screenshots: [] };
   const activePhase = current.phaseId || db.phases.find((phase) => phase.accountId === current.accountId && phase.status === 'active')?.id;
-  const html = selectField('accountId', 'Conta', accountOptions(), current.accountId) + selectField('phaseId', 'Fase', phaseOptions(current.accountId), activePhase) + field('closedDate', 'Data operacional', 'date', current.closedDate, 'required') + selectField('side', 'Direção', [['Compra', 'Compra'], ['Venda', 'Venda']], current.side) + field('symbol', 'Par / ativo', 'text', current.symbol, 'required maxlength="30"') + field('lots', 'Lotes', 'number', current.lots, 'min="0" step="0.01"') + field('entry', 'Entrada', 'number', current.entry, 'min="0" step="any"') + field('stopLoss', 'Stop loss', 'number', current.stopLoss, 'min="0" step="any"') + field('takeProfit', 'Take profit', 'number', current.takeProfit, 'min="0" step="any"') + field('exit', 'Saída final', 'number', current.exit, 'min="0" step="any"') + field('risk', 'Risco inicial (USD)', 'number', fromCents(current.riskCents), 'required min="0.01" step="0.01"') + field('plannedReward', 'Recompensa planejada (USD)', 'number', fromCents(current.plannedRewardCents), 'required min="0" step="0.01"') + field('grossPnl', 'PnL bruto (USD)', 'number', fromCents(current.grossPnlCents), 'required step="0.01"') + field('fees', 'Custos (USD)', 'number', fromCents(current.feesCents), 'min="0" step="0.01"') + field('commission', 'Comissão (USD)', 'number', fromCents(current.commissionCents), 'min="0" step="0.01"') + field('swap', 'Swap (USD)', 'number', fromCents(current.swapCents), 'step="0.01"') + field('strategy', 'Estratégia', 'text', current.strategy, 'maxlength="80"') + field('partialPnls', 'Saídas parciais — PnL USD, separado por vírgula', 'text', current.partialExits.map((item) => fromCents(item.pnlCents)).join(', '), 'placeholder="50, 75.25"', true) + textArea('notes', 'Observações', current.notes) + `<label class="field full file-field">Prints da operação<input name="screenshots" type="file" accept="image/*" multiple ${auth.user ? '' : 'disabled'}><span class="helper">${auth.user ? 'As imagens serão salvas em uma pasta privada criada por este site no seu Google Drive.' : 'Conecte sua conta Google em Configurações para anexar prints.'}</span></label>`;
+  const html = selectField('accountId', 'Conta', accountOptions(), current.accountId) + selectField('phaseId', 'Fase', phaseOptions(current.accountId), activePhase) + field('closedDate', 'Data operacional', 'date', current.closedDate, 'required') + selectField('side', 'Direção', [['Compra', 'Compra'], ['Venda', 'Venda']], current.side) + field('symbol', 'Par / ativo', 'text', current.symbol, 'required maxlength="30"') + field('lots', 'Lotes', 'number', current.lots, 'min="0" step="0.01"') + field('entry', 'Entrada', 'number', current.entry, 'min="0" step="any"') + field('stopLoss', 'Stop loss', 'number', current.stopLoss, 'min="0" step="any"') + field('takeProfit', 'Take profit', 'number', current.takeProfit, 'min="0" step="any"') + field('exit', 'Saída final', 'number', current.exit, 'min="0" step="any"') + field('risk', 'Risco inicial (USD)', 'number', fromCents(current.riskCents), 'required min="0.01" step="0.01"') + field('plannedReward', 'Recompensa planejada (USD)', 'number', fromCents(current.plannedRewardCents), 'required min="0" step="0.01"') + field('grossPnl', 'PnL bruto (USD)', 'number', fromCents(current.grossPnlCents), 'required step="0.01"') + field('fees', 'Custos (USD)', 'number', fromCents(current.feesCents), 'min="0" step="0.01"') + field('commission', 'Comissão (USD)', 'number', fromCents(current.commissionCents), 'min="0" step="0.01"') + field('swap', 'Swap (USD)', 'number', fromCents(current.swapCents), 'step="0.01"') + field('strategy', 'Estratégia', 'text', current.strategy, 'maxlength="80"') + field('partialPnls', 'Saídas parciais — PnL USD, separado por vírgula', 'text', current.partialExits.map((item) => fromCents(item.pnlCents)).join(', '), 'placeholder="50, 75.25"', true) + textArea('notes', 'Observações', current.notes) + `<label class="field full file-field">Prints da operação<input name="screenshots" type="file" accept="image/*" multiple ${access.connected ? '' : 'disabled'}><span class="helper">${access.connected ? 'As imagens serão salvas automaticamente em uma pasta privada no seu Google Drive.' : 'Configure o acesso automático em Configurações para anexar prints.'}</span></label>`;
   modal(id ? 'Editar operação' : 'Registrar operação', html, async (values) => {
     const account = db.accounts.find((item) => item.id === values.accountId); if (!account) throw new Error('Conta inválida.');
     const tradeId = id || uid();
@@ -140,7 +140,7 @@ async function deleteTrade(tradeId) {
   const screenshots = trade.screenshots || [];
   const message = screenshots.length ? `Excluir esta operação e ${screenshots.length} print(s) do Google Drive?` : 'Excluir esta operação?';
   if (!confirm(message)) return;
-  if (screenshots.length && !auth.user) throw new Error('Conecte sua conta Google antes de excluir uma operação que possui prints.');
+  if (screenshots.length && !access.connected) throw new Error('Configure o acesso automático antes de excluir uma operação que possui prints.');
   for (const screenshot of screenshots) await workspace.deleteScreenshot(screenshot.id);
   commit(() => { db.trades = db.trades.filter((item) => item.id !== tradeId); }, 'delete', 'trades');
 }
@@ -183,11 +183,28 @@ $('#app').addEventListener('click', async (event) => {
     else if (action === 'clear-filters') { Object.assign(filters, { account: selected, from: '', to: '', firm: '', phase: '', symbol: '', strategy: '', side: '' }); render(); }
     else if (action === 'calendar-mode') { calendarMode = button.dataset.mode; render(); } else if (action === 'prev-period') { if (calendarMode === 'year') year -= 1; else if (--month < 0) { month = 11; year -= 1; } render(); } else if (action === 'next-period') { if (calendarMode === 'year') year += 1; else if (++month > 11) { month = 0; year += 1; } render(); } else if (action === 'today') { year = new Date().getFullYear(); month = new Date().getMonth(); render(); } else if (action === 'open-month') { month = Number(button.dataset.month); calendarMode = 'month'; render(); } else if (action === 'day-detail') dayDetail(button.dataset.date);
     else if (action === 'export-json') download(`forex-journal-backup-${isoDate()}.json`, JSON.stringify(db, null, 2)); else if (action === 'import-json') $('#importFile').click(); else if (action === 'export-csv') exportCsv();
-    else if (action === 'sign-in') { await auth.signIn(); syncStatus = 'preparando Google Drive…'; refreshSyncStatus(); await workspace.ensureWorkspace(); syncStatus = 'conectado'; render(); }
-    else if (action === 'sign-out') { await auth.signOut(); syncStatus = 'aguardando conexão'; render(); }
+    else if (action === 'configure-access') accessForm();
+    else if (action === 'forget-access') { access.clear(); syncStatus = 'aguardando configuração'; render(); }
+    else if (action === 'sync-now') { db = await sync.flush(() => db, (next) => { db = next; }); render(); }
     else if (action === 'sync-pull') { if (confirm('Substituir a cópia local pela versão da sua planilha Google?')) { db = await sync.pull(); render(); } }
-    else if (action === 'sync-push') { db = await sync.push(db); render(); }
   } catch (error) { toast(error.message); }
 });
 window.addEventListener('resize', () => { if (page === 'dashboard' || page === 'analytics') render(); });
+function accessForm() {
+  modal('Configurar acesso automático', field('secret', 'Segredo pessoal', 'password', '', 'required minlength="32" autocomplete="current-password"') + '<p class="helper full">Digite o segredo configurado no Apps Script. Ele ficará salvo somente neste navegador.</p>', async (values) => {
+    access.setToken(values.secret);
+    syncStatus = 'conferindo a nuvem';
+    try { db = await sync.bootstrap(db); }
+    catch (error) { if (error.code === 'UNAUTHORIZED' || error.code === 'AUTH_NOT_CONFIGURED') access.clear(); throw error; }
+    render();
+  });
+}
+
+async function bootstrapRemote() {
+  if (!access.connected || !sync) return;
+  try { db = await sync.bootstrap(db); render(); }
+  catch (error) { toast(error.message); refreshSyncStatus(error.message); }
+}
+
 render();
+bootstrapRemote();

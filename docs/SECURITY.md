@@ -2,24 +2,23 @@
 
 ## Antes de publicar
 
-- [ ] Somente **Google Sheets API** e **Google Drive API** são necessárias.
-- [ ] A origem OAuth contém apenas `http://localhost:8080` e `https://SEU_USUARIO.github.io`.
-- [ ] O usuário de teste OAuth é somente a conta do proprietário.
-- [ ] O frontend solicita `drive.file`, nunca acesso completo ao Drive.
-- [ ] Nenhum client secret, token, chave privada, `.env` ou JSON de conta de serviço foi commitado.
-- [ ] Planilha e pasta de prints continuam privadas.
+- [ ] `FOREX_JOURNAL_TOKEN` possui pelo menos 32 caracteres aleatórios e existe somente nas propriedades privadas do Apps Script e nos navegadores autorizados.
+- [ ] Nenhum segredo, token, chave privada, `.env` ou credencial de serviço foi commitado.
+- [ ] O Web App executa como o proprietário; o acesso anônimo serve somente para alcançar o endpoint protegido.
+- [ ] O manifesto solicita apenas `spreadsheets.currentonly`, `drive.file` e `script.external_request`.
+- [ ] A planilha e a pasta de prints continuam restritas ao proprietário.
 - [ ] Backups JSON são tratados como dados financeiros sensíveis.
 
 ## Operação
 
 - [ ] Exportar e testar backups regularmente.
-- [ ] Conferir a planilha antes de substituir dados locais.
-- [ ] Remover o acesso do aplicativo na Conta Google se um dispositivo for perdido.
-- [ ] Manter navegadores e dependências atualizados.
-- [ ] Não adicionar scripts, pixels ou bibliotecas de terceiros não confiáveis.
+- [ ] Usar **Esquecer acesso neste navegador** antes de entregar ou vender um dispositivo.
+- [ ] Se um dispositivo for perdido, alterar imediatamente `FOREX_JOURNAL_TOKEN` nas propriedades do script.
+- [ ] Conferir a versão antes de substituir dados em um conflito.
+- [ ] Manter navegador e Apps Script atualizados.
 
 ## Ameaças e riscos residuais
 
-Textos vindos do usuário são escapados antes de entrar no HTML. O token permanece na memória e não é persistido. Ainda assim, um XSS na mesma origem poderia ler dados locais e usar a sessão conectada; por isso o site evita dependências e scripts desnecessários.
+O segredo persistente elimina logins repetidos, mas qualquer pessoa com acesso ao perfil desbloqueado do navegador pode usar o diário. Um XSS na mesma origem também poderia ler o `localStorage`; por isso o frontend não carrega bibliotecas ou scripts de terceiros e escapa textos antes de inseri-los no HTML.
 
-O Client ID OAuth não é secreto. A proteção real vem das origens autorizadas, do consentimento Google, do token temporário e do escopo limitado. Dados exportados e dispositivos desbloqueados continuam sob responsabilidade do usuário.
+O endpoint do Apps Script é publicamente alcançável, porém todas as operações de dados exigem o segredo. Esse modelo é apropriado para um aplicativo pessoal, não para uma aplicação pública multiusuário. Se o segredo vazar, ele deve ser rotacionado.

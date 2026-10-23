@@ -2,7 +2,7 @@ import { toCents, addCents } from './money.js';
 
 export const SCHEMA_VERSION = 3;
 export const COLLECTIONS = ['accounts', 'phases', 'trades', 'cashFlows', 'payouts', 'fees', 'snapshots'];
-export const emptyDatabase = () => ({ schemaVersion: SCHEMA_VERSION, revision: 0, accounts: [], phases: [], trades: [], cashFlows: [], payouts: [], fees: [], snapshots: [], settings: {}, audit: [] });
+export const emptyDatabase = () => ({ schemaVersion: SCHEMA_VERSION, revision: 0, remoteRevision: 0, syncedRevision: 0, accounts: [], phases: [], trades: [], cashFlows: [], payouts: [], fees: [], snapshots: [], settings: {}, audit: [] });
 const cents = (value) => { try { return toCents(value || 0); } catch { return 0; } };
 
 export function migrate(raw) {

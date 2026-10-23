@@ -1,7 +1,7 @@
 export const appConfig = {
   remoteEnabled: true,
-  google: {
-    clientId: '659766492846-dn44l2noead5lq29cfg98r0n3ks1f0uc.apps.googleusercontent.com',
-    spreadsheetTitle: 'Forex Trading Journal Data',
+  appsScript: {
+    endpoint: 'COLE_AQUI_A_URL_DO_APPS_SCRIPT',
+    spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1OHYrXEsRgqrxso5HdgnOxG3FDz98bgWEBRAhj1dKFmM/edit',
   },
 };

@@ -1,9 +1,8 @@
-// O Client ID identifica o aplicativo OAuth; não é uma chave privada.
-// Nunca coloque client secret, tokens ou credenciais de serviço neste arquivo.
+// A URL do Web App não é um segredo. Nunca coloque FOREX_JOURNAL_TOKEN neste arquivo.
 export const appConfig = {
   remoteEnabled: true,
-  google: {
-    clientId: 'SEU_CLIENT_ID.apps.googleusercontent.com',
-    spreadsheetTitle: 'Forex Trading Journal Data',
+  appsScript: {
+    endpoint: 'https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec',
+    spreadsheetUrl: 'URL_DA_SUA_PLANILHA',
   },
 };
