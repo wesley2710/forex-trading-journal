@@ -1,0 +1,14 @@
+{
+  "name": "forex-trading-journal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs backend/tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "ci": "npm run check && npm test && npm run smoke",
+    "start": "python -m http.server 8080"
+  },
+  "engines": { "node": ">=20" }
+}

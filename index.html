@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="description" content="Diário seguro de operações Forex e contas de mesas proprietárias">
+  <title>Forex Trading Journal</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#app">Pular para o conteúdo</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Menu principal">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">◈</span><div><strong>FOREX JOURNAL</strong><small>Trading performance</small></div></div>
+      <nav id="nav" aria-label="Navegação">
+        <button data-page="dashboard" class="active">▦ &nbsp; Dashboard</button>
+        <button data-page="accounts">▤ &nbsp; Minhas contas</button>
+        <button data-page="trades">⇄ &nbsp; Operações</button>
+        <button data-page="calendar">▦ &nbsp; Calendário</button>
+        <button data-page="analytics">◫ &nbsp; Estatísticas</button>
+        <button data-page="settings">⚙ &nbsp; Configurações</button>
+      </nav>
+      <div class="aside-bottom"><span id="syncDot" class="status-dot"></span><span id="syncLabel">Modo local</span><small id="syncDetail">Backup local ativo; conecte o backend para sincronizar.</small></div>
+    </aside>
+    <div class="main-wrap">
+      <header class="topbar">
+        <button id="menuButton" class="iconbtn mobile" aria-label="Abrir menu" aria-expanded="false">☰</button>
+        <div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Acompanhe seu desempenho operacional</p></div>
+        <div class="toolbar"><label class="sr-only" for="accountFilter">Filtrar conta</label><select id="accountFilter"><option value="all">Todas as contas</option></select><button class="primary" id="quickAdd">+ Nova operação</button></div>
+      </header>
+      <main id="app" tabindex="-1"></main>
+      <footer>Forex Trading Journal • Valores em USD • Equity depende de snapshots informados</footer>
+    </div>
+  </div>
+  <dialog id="dialog" aria-labelledby="modalTitle"><form id="entityForm"><div class="modalhead"><h2 id="modalTitle"></h2><button type="button" class="iconbtn" id="closeDialog" aria-label="Fechar">✕</button></div><div id="formFields" class="fields"></div><p id="formError" role="alert" class="error"></p><div class="modalfoot"><button type="button" class="ghost" id="cancelDialog">Cancelar</button><button class="primary" type="submit">Salvar</button></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

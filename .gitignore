@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+.env
+.env.*
+!.env.example
+js/config.local.js
+service-account*.json
+backend/node_modules/
+coverage/
+*.log
