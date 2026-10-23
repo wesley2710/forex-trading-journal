@@ -1,48 +1,30 @@
 # Arquitetura de produção
 
-## Decisão
-
 ```text
 GitHub Pages (HTML/CSS/JS)
-  ├─ localStorage v2: cache, modo offline e backup
-  ├─ Firebase Auth: login Google e ID token curto
-  └─ HTTPS + Bearer token
-       Cloud Run (Node/Express)
-         ├─ Firebase Admin: valida token e UID permitido
-         ├─ validação, CORS, idempotência e controle de revisão
-         └─ Sheets API com identidade de serviço
-              Google Sheets privado (schema v2)
+  ├─ localStorage v3: cache, modo offline e backup
+  ├─ Google Identity Services: OAuth no navegador
+  └─ escopo drive.file
+       ├─ Google Sheets API: dados estruturados e revisão
+       └─ Google Drive API: prints privados das operações
 ```
 
-O navegador nunca recebe credenciais da conta de serviço nem permissão direta de escrita na planilha. A configuração pública do Firebase identifica o projeto, mas não concede acesso ao Sheets. O backend exige token válido e `ALLOWED_FIREBASE_UIDS`.
+Não existe backend em produção. O aplicativo é destinado a uma única pessoa e usa a própria conta Google dela como identidade e armazenamento. Firebase pode permanecer configurado no projeto, mas não é usado pelo frontend.
 
-## Tradeoffs considerados
+## Sincronização
 
-- **Apps Script público:** simples, porém uma URL de `doPost` anônimo não oferece autorização suficiente. Não foi usado.
-- **Sheets API direto do browser:** exigiria OAuth e exporia uma superfície de acesso ampla no cliente. Não foi usado.
-- **Firebase/Firestore:** seria mais transacional e escalável, mas deixaria de manter Sheets como datastore principal.
-- **Cloud Run + Sheets API:** oferece autenticação e validação reais mantendo Sheets. Custa mais configuração e Sheets continua inadequado para alto volume.
+Cada envio grava todas as coleções e incrementa uma revisão em `_meta`. As contagens registradas fazem linhas antigas serem ignoradas. Um envio com revisão local desatualizada é rejeitado, evitando sobrescrever silenciosamente uma versão mais nova. A resolução é explícita: exportar o local, baixar o remoto e então decidir o que reenviar.
 
-Esta implementação é orientada a uso pessoal/baixo volume. O Cloud Run deve usar `--concurrency=1 --max-instances=1`. Cada salvamento escreve todas as coleções e a revisão em uma única chamada `values.batchUpdate`; contagens registradas em `_meta` fazem linhas antigas serem ignoradas. `If-Match` detecta edição concorrente e `x-idempotency-key` evita repetição recente. Para colaboração intensa, migre a fonte da verdade para Firestore ou banco SQL e use Sheets apenas como relatório.
+A planilha possui as abas `Accounts`, `Phases`, `Trades`, `CashFlows`, `Payouts`, `Fees`, `Snapshots`, `Audit`, `Settings` e `_meta`. Cada linha guarda campos pesquisáveis básicos e o objeto completo em JSON. Prints são arquivos do Drive e as operações guardam somente ID, nome, tipo e tamanho.
 
-## Módulos do frontend
+## Segurança do acesso
 
-- `js/domain`: dinheiro em centavos, métricas, schema e validação.
-- `js/repositories`: persistência local e cliente remoto.
-- `js/services`: Firebase Auth e estado de sincronização.
-- `js/pages`: renderização por página.
-- `js/ui`: escaping e componentes HTML.
-- `js/app.js`: estado, roteamento e comandos de usuário.
-
-## Modelo v2
-
-`accounts`, `phases`, `trades`, `cashFlows`, `payouts`, `fees`, `snapshots`, `settings` e `audit`. Cada entidade tem ID estável e versão. Valores monetários são inteiros em centavos.
-
-O resultado líquido é `grossPnlCents - feesCents + swapCents - commissionCents`. Payout recebido é patrimônio recebido e não é somado novamente ao PnL. Balance operacional é saldo inicial + PnL realizado + movimentações marcadas como impactantes.
+O escopo `drive.file` não dá acesso geral ao Drive. O aplicativo pesquisa e altera apenas arquivos criados por ele ou explicitamente abertos com ele. O token de acesso fica apenas na memória e expira; após recarregar a página, o usuário precisa conectar novamente.
 
 ## Limites conhecidos
 
-- Não há preços ao vivo ou integração MT5; equity depende de snapshots manuais.
-- Alertas de perda não são garantia de compliance e não modelam toda regra comercial possível.
-- Sheets possui quotas, tamanho de célula e menor garantia transacional que um banco de dados.
-- A resolução de conflito é explícita: baixar a revisão remota ou exportar o local antes de substituir.
+- Sincronização é manual e substitui o snapshot completo.
+- Não há preços ao vivo nem integração MT5; equity depende de snapshots manuais.
+- Não há colaboração multiusuário nem mesclagem automática de conflitos.
+- Planilhas e Drive têm quotas gratuitas e limites próprios; esta solução é adequada para uso pessoal e baixo volume.
+- O espaço usado pelos prints conta na cota normal do Google Drive do usuário.

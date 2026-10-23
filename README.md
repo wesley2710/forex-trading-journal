@@ -1,18 +1,22 @@
 # Forex Trading Journal
 
-Aplicação web estática, responsiva e em português para diário de Forex e acompanhamento de múltiplas contas de prop firms. Funciona offline com backup local e pode sincronizar com Google Sheets por um backend autenticado.
+Aplicação web pessoal, responsiva e em português para registrar operações de Forex, acompanhar contas de prop firms e guardar prints. O site é estático e funciona sem servidor pago.
 
 ## Funcionalidades
 
-- Contas independentes, arquivamento e histórico de transições de fase.
-- Regras configuráveis de drawdown, base em balance/equity, timezone e rollover.
-- Operações com entry, stop, alvo, saída, lotes, risco, custos, swap, comissão e saídas parciais.
-- PnL líquido em centavos inteiros, RR planejado, R realizado, expectativa, profit factor e drawdown.
-- Payouts separados do saldo operacional e snapshots de balance/equity.
-- Calendários mensal e anual, drill-down diário e filtros combináveis.
-- Backup JSON validado, exportação CSV, auditoria local e migração do schema v1.
-- Firebase Auth + Cloud Run + Sheets API, com allowlist de UID e sem segredo no frontend.
-- CI, smoke test e deploy do frontend por GitHub Pages.
+- Contas independentes, fases, regras de drawdown, timezone e rollover.
+- Operações com entrada, stop, alvo, saída, lotes, risco, custos, swap, comissão, parciais e vários prints.
+- PnL líquido em centavos, RR planejado, R realizado, expectativa, profit factor e drawdown.
+- Payouts, taxas, movimentações e snapshots de balance/equity.
+- Calendários, drill-down diário, filtros, JSON, CSV e auditoria.
+- Modo local e sincronização manual com uma planilha e uma pasta privadas criadas na conta Google do usuário.
+- GitHub Pages, testes e deploy automatizado.
+
+## Arquitetura gratuita
+
+O frontend roda no GitHub Pages. O login OAuth acontece direto com o Google e solicita somente o escopo `drive.file`, que limita o aplicativo aos arquivos que ele próprio criou ou que o usuário abriu com ele. Os dados ficam no Google Planilhas e os prints no Google Drive. Não há Cloud Run, banco pago, conta de serviço nem faturamento vinculado.
+
+O Client ID OAuth é público por definição. Tokens não são gravados no `localStorage`; ficam apenas na memória da página.
 
 ## Executar localmente
 
@@ -24,12 +28,13 @@ npm run check
 python -m http.server 8080
 ```
 
-Abra `http://localhost:8080`. O modo local vem ativo em `js/config.js`; não execute por `file://`.
+Abra `http://localhost:8080`. Não execute por `file://`.
 
-## Produção
+## Documentação
 
-1. Leia [Arquitetura](docs/ARCHITECTURE.md) e [Segurança](docs/SECURITY.md).
-2. Siga o [guia de setup Google/Firebase/Cloud Run/GitHub](docs/SETUP.md).
-3. Consulte o [relatório de implementação](docs/IMPLEMENTATION_REPORT.md).
+- [Setup Google e GitHub](docs/SETUP.md)
+- [Arquitetura](docs/ARCHITECTURE.md)
+- [Segurança](docs/SECURITY.md)
+- [Relatório de implementação](docs/IMPLEMENTATION_REPORT.md)
 
-O projeto não contém credenciais, IDs reais, URL publicada ou promessa de compliance com regras de mesas. Equity intradiária só é conhecida quando um snapshot é registrado.
+Equity intradiária só é conhecida quando um snapshot é registrado. O aplicativo não substitui as regras oficiais da mesa proprietária.

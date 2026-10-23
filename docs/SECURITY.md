@@ -1,31 +1,25 @@
 # Checklist de segurança e privacidade
 
-## Antes do deploy
+## Antes de publicar
 
-- [ ] Planilha permanece privada e compartilhada apenas com a conta de serviço do Cloud Run.
-- [ ] `ALLOWED_FIREBASE_UIDS` contém somente os UIDs autorizados.
-- [ ] `ALLOWED_ORIGINS` contém URLs HTTPS exatas do frontend; `*` não é usado.
-- [ ] Login Google está habilitado no Firebase e os domínios autorizados foram revisados.
-- [ ] Cloud Run não permite acesso não autenticado ao Sheets fora da validação da aplicação.
-- [ ] Conta de serviço tem somente a função necessária e acesso somente à planilha alvo.
-- [ ] Nenhuma chave privada, token, `.env` ou JSON de service account foi commitado.
-- [ ] Secret scanning e proteção de branch estão ativos no GitHub.
-- [ ] Logs não registram corpo de operações, token ou dados financeiros.
-- [ ] Backups JSON são armazenados de forma criptografada e tratados como dados financeiros sensíveis.
+- [ ] Somente **Google Sheets API** e **Google Drive API** são necessárias.
+- [ ] A origem OAuth contém apenas `http://localhost:8080` e `https://SEU_USUARIO.github.io`.
+- [ ] O usuário de teste OAuth é somente a conta do proprietário.
+- [ ] O frontend solicita `drive.file`, nunca acesso completo ao Drive.
+- [ ] Nenhum client secret, token, chave privada, `.env` ou JSON de conta de serviço foi commitado.
+- [ ] Planilha e pasta de prints continuam privadas.
+- [ ] Backups JSON são tratados como dados financeiros sensíveis.
 
 ## Operação
 
-- [ ] Revisar acessos Firebase e IAM periodicamente.
-- [ ] Revogar sessões ao perder um dispositivo.
 - [ ] Exportar e testar backups regularmente.
-- [ ] Monitorar erros 401, 403, 409, 429 e 5xx sem registrar payloads.
-- [ ] Manter dependências e runtime atualizados.
-- [ ] Confirmar visualmente a planilha antes de apagar cópias locais.
+- [ ] Conferir a planilha antes de substituir dados locais.
+- [ ] Remover o acesso do aplicativo na Conta Google se um dispositivo for perdido.
+- [ ] Manter navegadores e dependências atualizados.
+- [ ] Não adicionar scripts, pixels ou bibliotecas de terceiros não confiáveis.
 
-## Ameaças tratadas
+## Ameaças e riscos residuais
 
-XSS é reduzido por escaping centralizado e limites de texto. O backend revalida o payload, aplica limite de 5 MB, CORS estrito, token revogado, allowlist, controle otimista e idempotência. `helmet` adiciona cabeçalhos defensivos no backend.
+Textos vindos do usuário são escapados antes de entrar no HTML. O token permanece na memória e não é persistido. Ainda assim, um XSS na mesma origem poderia ler dados locais e usar a sessão conectada; por isso o site evita dependências e scripts desnecessários.
 
-## Riscos residuais
-
-XSS na mesma origem poderia ler dados locais e usar a sessão autenticada; por isso não adicione scripts não confiáveis. Sheets não substitui banco transacional. A disponibilidade depende das quotas Google e do Cloud Run. Dados exportados ficam sob responsabilidade do usuário.
+O Client ID OAuth não é secreto. A proteção real vem das origens autorizadas, do consentimento Google, do token temporário e do escopo limitado. Dados exportados e dispositivos desbloqueados continuam sob responsabilidade do usuário.
