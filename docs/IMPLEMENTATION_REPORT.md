@@ -17,7 +17,14 @@
 
 ## Verificado localmente
 
-Registre aqui o resultado da execução final de `npm run ci` e do teste visual. O relatório de entrega do Codex informa os resultados observados no ambiente em que o ZIP foi produzido.
+- 14 testes automatizados aprovados: dinheiro, R/RR, agregações, contas isoladas, drawdown, timezone, alertas, migração e validação do backend.
+- 31 arquivos JavaScript aprovados na validação sintática e na inspeção de chave privada.
+- Smoke HTTP aprovado para `index.html`, `js/app.js` e `css/style.css`.
+- Teste visual desktop aprovado no navegador local.
+- Teste visual mobile aprovado em viewport de 390 px, incluindo abertura do menu.
+- Fluxo funcional aprovado: cadastrar conta, registrar operação e observar saldo/PnL/R atualizados.
+
+Não foram testados com credenciais reais: Firebase Auth, Sheets API, Cloud Run, GitHub remoto e GitHub Pages. O código e os guias estão preparados, mas esses itens só podem ser confirmados após a configuração manual.
 
 ## Depende de configuração manual
 
