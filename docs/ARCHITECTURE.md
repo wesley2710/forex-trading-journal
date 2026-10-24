@@ -19,7 +19,7 @@ Ao abrir o site, a sessão é restaurada pelo segredo salvo no navegador. O apli
 
 ## Estrutura da planilha
 
-As abas são `Accounts`, `Phases`, `Trades`, `CashFlows`, `Payouts`, `Fees`, `Snapshots`, `Audit`, `Settings` e `_meta`. Cada linha guarda ID, versão, timestamp e o objeto completo em JSON. `_meta` registra versão do schema, revisão, contagens e última atualização.
+As abas são `Accounts`, `Phases`, `Trades`, `CashFlows`, `Payouts`, `Fees`, `Snapshots`, `Audit`, `Settings` e `_meta`. `Phases` permanece apenas para compatibilidade com backups antigos e não aparece no fluxo atual. Cada linha guarda ID, versão, timestamp e o objeto completo em JSON. `_meta` registra versão do schema, revisão, contagens e última atualização.
 
 Os prints são arquivos privados na pasta `Forex Trading Journal - Prints`. As operações guardam somente ID, nome, tipo e tamanho. O backend confere se o arquivo pertence à pasta antes de permitir leitura ou exclusão.
 

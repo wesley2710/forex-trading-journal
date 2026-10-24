@@ -4,7 +4,7 @@
 
 - Schema v3 com migrações v1/v2 e referências de prints por operação.
 - Valores monetários em centavos e métricas financeiras testáveis.
-- Contas, fases, operações detalhadas, movimentações, payouts, taxas e snapshots.
+- Contas, operações detalhadas, movimentações, payouts, taxas e snapshots.
 - Dashboard, calendários, filtros, backup JSON, CSV e auditoria.
 - Backend gratuito em Google Apps Script vinculado à planilha.
 - Segredo persistente por navegador, validado em todas as ações do backend.

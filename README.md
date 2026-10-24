@@ -4,7 +4,7 @@ Aplicação web pessoal e responsiva para registrar operações de Forex, acompa
 
 ## Funcionalidades
 
-- Contas independentes, fases, regras de drawdown, timezone e rollover.
+- Contas independentes, regras de drawdown, timezone e rollover.
 - Operações com entrada, stop, alvo, saída, lotes, risco, custos, swap, comissão, parciais e vários prints.
 - PnL líquido em centavos, RR planejado, R realizado, expectativa, profit factor e drawdown.
 - Payouts, taxas, movimentações e snapshots de balance/equity.
