@@ -53,13 +53,15 @@ test('filtros de hoje, semana, mês, 30 dias, ano e personalizado limitam todos 
 
 test('página de estatísticas contém as dez análises e ajuda contextual', () => {
   const trades = [makeTrade(20000, '2026-01-05'), makeTrade(-10000, '2026-01-06', { symbol: 'NAS100' })];
-  const db = { accounts: [account], trades, cashFlows: [] };
+  const db = { accounts: [account], trades, cashFlows: [], payouts: [{ id: 'p1', accountId: 'a', date: '2026-01-05', grossCents: 200000, traderSharePercent: 80, netCents: 160000, status: 'received' }] };
   const result = renderAnalytics({ db, trades, accounts: [account] });
   for (const text of ['Melhores e piores desempenhos', 'Sequências de resultados', 'Ganho, perda e payoff', 'Distribuição dos resultados em R', 'Drawdown completo', 'Resultados por mês', 'Desempenho por dia da semana', 'Impacto dos custos', 'Comparação entre contas', 'Desempenho recente']) assert.match(result.html, new RegExp(text));
   assert.match(result.html, /Resultado detalhado por ativo/);
   assert.match(result.html, /EUR\/USD/);
   assert.match(result.html, /NAS100/);
   assert.match(result.html, /data-performance-period/);
+  assert.match(result.html, /Histórico de saques/);
+  assert.match(result.html, /Líquido recebido/);
   assert.ok((result.html.match(/class="info-trigger"/g) || []).length >= 15);
   assert.deepEqual(result.charts.distribution.labels, ['< −1R', '−1R a 0R', '0R a +1R', '+1R a +2R', '≥ +2R']);
 });

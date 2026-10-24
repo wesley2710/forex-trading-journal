@@ -11,7 +11,7 @@ Aplicação web pessoal e responsiva para registrar operações de Forex, acompa
 - Estatísticas avançadas com rankings por amostra, payoff, sequências, distribuição em R, drawdown completo, períodos, custos, comparação de contas e janela recente.
 - Resultado detalhado de cada ativo e filtros globais de estatísticas por dia, semana, mês, 30 dias, ano ou intervalo personalizado.
 - Filtro de período sincronizado entre Dashboard e Estatísticas, preservando saldo e alertas atuais sem distorção.
-- Payouts, taxas, movimentações e snapshots de balance/equity.
+- Saques com divisão editável entre trader e mesa, valores bruto e líquido, taxas, movimentações e snapshots de balance/equity.
 - Calendários, drill-down diário, filtros, JSON, CSV e auditoria.
 - Cache local/offline e sincronização automática cerca de 900 ms após cada alteração.
 - Planilha estruturada e pasta privada de prints na conta Google do proprietário.

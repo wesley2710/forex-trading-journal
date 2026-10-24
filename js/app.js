@@ -3,6 +3,7 @@ import { barChart, lineChart } from './charts.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
 import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
+import { payoutDate, payoutGrossCents, payoutNetCents, payoutSharePercent } from './domain/payouts.js';
 import { normalizeTrade } from './domain/schema.js';
 import { isoDate, netPnlCents, summarize, tradeR, uid } from './domain/trading.js';
 import { validateAccount, validateTrade } from './domain/validation.js';
@@ -78,7 +79,7 @@ function render() {
   else if (page === 'accounts') $('#app').innerHTML = renderAccounts({ db, showArchived });
   else if (page === 'trades') $('#app').innerHTML = renderTrades({ db, filters, accountName });
   else if (page === 'calendar') $('#app').innerHTML = renderCalendar({ trades: activeTrades(), year, month, mode: calendarMode });
-  else if (page === 'analytics') { const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected)); const period = performancePeriod(); result = renderAnalytics({ db, trades: filterTradesByPeriod(activeTrades(), period), accounts, period }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.charts.rCurve); lineChart($('#pnlChart'), result.charts.pnlCurve); lineChart($('#drawdownChart'), result.charts.drawdown); barChart($('#distributionChart'), result.charts.distribution.values, result.charts.distribution.labels); barChart($('#monthlyChart'), result.charts.monthly.values, result.charts.monthly.labels); }
+  else if (page === 'analytics') { const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected)); const period = performancePeriod(); result = renderAnalytics({ db, trades: filterTradesByPeriod(activeTrades(), period), accounts, selected, period }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.charts.rCurve); lineChart($('#pnlChart'), result.charts.pnlCurve); lineChart($('#drawdownChart'), result.charts.drawdown); barChart($('#distributionChart'), result.charts.distribution.values, result.charts.distribution.labels); barChart($('#monthlyChart'), result.charts.monthly.values, result.charts.monthly.labels); }
   else { $('#app').innerHTML = renderSettings({ db, remoteEnabled: access.configured, connected: access.connected, syncStatus, spreadsheetUrl: workspace?.spreadsheetUrl || appConfig.appsScript?.spreadsheetUrl }); bindImport(); }
   refreshSyncStatus();
 }
@@ -120,10 +121,32 @@ function presetForm(kind, previous = '') {
   });
 }
 function cashFlowForm(accountId) {
-  if (!db.accounts.length) return toast('Cadastre uma conta primeiro.'); modal('Registrar movimentação', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['deposit', 'Depósito'], ['withdrawal', 'Saque'], ['adjustment', 'Ajuste'], ['fee', 'Taxa'], ['payout', 'Payout']], 'deposit') + field('amount', 'Valor com sinal (USD)', 'number', 0, 'required step="0.01"') + `<label class="check field full"><input name="affectsBalance" type="checkbox" checked> Impacta o saldo operacional</label>` + textArea('notes', 'Observações', '', 500), (values) => { const amountCents = toCents(values.amount); commit(() => db.cashFlows.push({ id: uid(), accountId: values.accountId, date: values.date, occurredAt: `${values.date}T12:00:00Z`, type: values.type, amountCents, affectsBalance: values.affectsBalance === 'on', notes: values.notes.trim(), version: 1 }), 'create', 'cashFlows'); });
+  if (!db.accounts.length) return toast('Cadastre uma conta primeiro.'); modal('Registrar movimentação', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['deposit', 'Depósito'], ['withdrawal', 'Retirada do saldo operacional'], ['adjustment', 'Ajuste'], ['fee', 'Taxa'], ['payout', 'Ajuste de saldo por saque']], 'deposit') + field('amount', 'Valor com sinal (USD)', 'number', 0, 'required step="0.01"') + `<label class="check field full"><input name="affectsBalance" type="checkbox" checked> Impacta o saldo operacional</label>` + textArea('notes', 'Observações', '', 500), (values) => { const amountCents = toCents(values.amount); commit(() => db.cashFlows.push({ id: uid(), accountId: values.accountId, date: values.date, occurredAt: `${values.date}T12:00:00Z`, type: values.type, amountCents, affectsBalance: values.affectsBalance === 'on', notes: values.notes.trim(), version: 1 }), 'create', 'cashFlows'); });
 }
-function payoutForm(accountId) {
-  modal('Registrar payout', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + selectField('status', 'Status', [['requested', 'Solicitado'], ['approved', 'Aprovado'], ['received', 'Recebido'], ['rejected', 'Recusado']], 'requested') + field('requestedAt', 'Data da solicitação', 'date', isoDate(), 'required') + field('receivedAt', 'Data do recebimento', 'date', '') + field('requested', 'Valor solicitado (USD)', 'number', 0, 'required min="0" step="0.01"') + field('received', 'Valor recebido (USD)', 'number', 0, 'min="0" step="0.01"'), (values) => commit(() => db.payouts.push({ id: uid(), accountId: values.accountId, status: values.status, requestedAt: values.requestedAt, receivedAt: values.receivedAt || null, requestedCents: toCents(values.requested), receivedCents: toCents(values.received), version: 1 }), 'create', 'payouts'));
+function updatePayoutPreview() {
+  const grossInput = document.querySelector('[name="payoutGross"]'); const shareInput = document.querySelector('[name="traderSharePercent"]');
+  const netTarget = $('#payoutNetPreview'); const firmTarget = $('#payoutFirmPreview'); if (!grossInput || !shareInput || !netTarget || !firmTarget) return;
+  const gross = Number(String(grossInput.value).replace(',', '.')); const share = Number(String(shareInput.value).replace(',', '.'));
+  const grossCents = Number.isFinite(gross) ? Math.max(0, Math.round(gross * 100)) : 0; const validShare = Number.isFinite(share) ? Math.min(100, Math.max(0, share)) : 0;
+  const netCents = Math.round(grossCents * validShare / 100); netTarget.textContent = money(netCents); firmTarget.textContent = money(grossCents - netCents);
+}
+function payoutForm(accountId, payoutId) {
+  const existing = db.payouts.find((item) => item.id === payoutId);
+  const options = accountOptions();
+  if (existing && !options.some(([id]) => id === existing.accountId)) { const account = db.accounts.find((item) => item.id === existing.accountId); if (account) options.push([account.id, account.name]); }
+  if (!options.length) { toast('Cadastre uma conta antes de registrar um saque.'); return; }
+  const selectedAccountId = existing?.accountId || accountId || options[0][0]; const account = db.accounts.find((item) => item.id === selectedAccountId);
+  const grossCents = existing ? payoutGrossCents(existing) : 0; const share = existing ? payoutSharePercent(existing) : Number(account?.profitSplit ?? 80); const date = existing ? payoutDate(existing) : isoDate();
+  const html = selectField('accountId', 'Conta', options, selectedAccountId) + field('payoutDate', 'Data do saque', 'date', date, 'required') + field('payoutGross', 'Valor bruto do saque (USD)', 'number', fromCents(grossCents), 'required min="0.01" step="0.01"') + field('traderSharePercent', 'Sua porcentagem (%)', 'number', share, 'required min="0" max="100" step="0.01"') + `<div class="field full payout-preview"><span>Divisão calculada</span><div class="compact-metrics"><div><span>Você recebe</span><b id="payoutNetPreview">${money(existing ? payoutNetCents(existing) : 0)}</b></div><div><span>Parte da mesa</span><b id="payoutFirmPreview">${money(existing ? payoutGrossCents(existing) - payoutNetCents(existing) : 0)}</b></div></div></div>` + textArea('notes', 'Observações', existing?.notes || '', 500);
+  modal(existing ? 'Editar saque' : 'Registrar saque', html, (values) => {
+    const gross = toCents(values.payoutGross); const traderSharePercent = Number(values.traderSharePercent);
+    if (gross <= 0) throw new Error('O valor bruto do saque deve ser maior que zero.');
+    if (!Number.isFinite(traderSharePercent) || traderSharePercent < 0 || traderSharePercent > 100) throw new Error('A porcentagem deve ficar entre 0% e 100%.');
+    const netCents = Math.round(gross * traderSharePercent / 100); const now = new Date().toISOString();
+    const payout = { ...existing, id: payoutId || uid(), accountId: values.accountId, date: values.payoutDate, grossCents: gross, traderSharePercent, netCents, status: 'received', requestedAt: values.payoutDate, receivedAt: values.payoutDate, requestedCents: gross, receivedCents: netCents, notes: values.notes.trim(), createdAt: existing?.createdAt || now, updatedAt: now, version: Number(existing?.version || 0) + 1 };
+    commit(() => { if (payoutId) db.payouts = db.payouts.map((item) => item.id === payoutId ? payout : item); else db.payouts.push(payout); }, payoutId ? 'update' : 'create', 'payouts');
+  });
+  updatePayoutPreview();
 }
 function feeForm(accountId) {
   modal('Registrar taxa de prop firm', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['evaluation', 'Avaliação'], ['reset', 'Reset'], ['activation', 'Ativação'], ['platform', 'Plataforma'], ['other', 'Outra']], 'evaluation') + field('amount', 'Valor pago (USD)', 'number', 0, 'required min="0" step="0.01"') + textArea('notes', 'Observações', '', 500), (values) => commit(() => db.fees.push({ id: uid(), accountId: values.accountId, date: values.date, type: values.type, amountCents: toCents(values.amount), notes: values.notes.trim(), version: 1 }), 'create', 'fees'));
@@ -156,6 +179,8 @@ async function deleteTrade(tradeId) {
 function exportCsv() { const columns = ['closedDate', 'accountId', 'symbol', 'side', 'entry', 'stopLoss', 'takeProfit', 'exit', 'lots', 'riskCents', 'plannedRewardCents', 'grossPnlCents', 'feesCents', 'swapCents', 'commissionCents', 'netPnlCents', 'strategy', 'notes']; const rows = [columns.join(','), ...db.trades.map((trade) => columns.map((key) => `"${String(trade[key] ?? '').replace(/"/g, '""')}"`).join(','))]; download('forex-trades.csv', `\ufeff${rows.join('\r\n')}`, 'text/csv;charset=utf-8'); }
 function bindImport() { const input = $('#importFile'); if (!input) return; input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = validateImport(JSON.parse(await file.text())); if (confirm('Substituir todos os dados locais pelo backup validado?')) { db = localRepository.replace(imported); selected = 'all'; toast('Backup importado.'); render(); } } catch (error) { alert(error.message); } }; }
 
+$('#entityForm').addEventListener('input', (event) => { if (['payoutGross', 'traderSharePercent'].includes(event.target.name)) updatePayoutPreview(); });
+$('#entityForm').addEventListener('change', (event) => { if (event.target.name === 'accountId' && $('#payoutNetPreview')) { const account = db.accounts.find((item) => item.id === event.target.value); const share = document.querySelector('[name="traderSharePercent"]'); if (account && share) share.value = Number(account.profitSplit ?? 80); updatePayoutPreview(); } });
 $('#entityForm').onsubmit = async (event) => {
   event.preventDefault(); const submit = $('#entityForm button[type=submit]');
   try {
@@ -189,7 +214,7 @@ $('#app').addEventListener('click', async (event) => {
   try {
     if (action === 'new-account') accountForm(); else if (action === 'edit-account') accountForm(id); else if (action === 'toggle-archived') { showArchived = !showArchived; render(); }
     else if (action === 'archive-account') commit(() => { const account = db.accounts.find((item) => item.id === id); account.archived = !account.archived; account.updatedAt = new Date().toISOString(); }, 'archive-toggle', 'accounts');
-    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'fee') feeForm(id); else if (action === 'payout') payoutForm(id); else if (action === 'snapshot') snapshotForm(id);
+    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque?')) commit(() => { db.payouts = db.payouts.filter((item) => item.id !== id); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
     else if (action === 'new-trade') tradeForm(); else if (action === 'edit-trade') tradeForm(id); else if (action === 'view-screenshots') await showScreenshots(id); else if (action === 'delete-trade') await deleteTrade(id);
     else if (action === 'add-preset') presetForm(button.dataset.kind);
     else if (action === 'edit-preset') presetForm(button.dataset.kind, button.dataset.value);

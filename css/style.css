@@ -78,6 +78,7 @@ footer { padding: 0 36px 25px; color: #6d7e97; font-size: 11px; }
 .compact-metrics > div { display: grid; gap: 6px; padding: 12px; border: 1px solid #293a50; background: #0f1a29; border-radius: 9px; }
 .compact-metrics span { color: #8fa4bd; font-size: 11px; }
 .compact-metrics b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.payout-preview .compact-metrics { margin: 0; }
 .summary-strip { display: flex; flex-wrap: wrap; gap: 9px 24px; margin: 15px 0 5px; padding: 12px 14px; border-radius: 9px; background: #0f1a29; color: #9fb1c6; font-size: 12px; }
 .summary-strip b { color: #e6eef8; }
 .data-table td small { display: block; margin-top: 4px; color: #8195ad; }
