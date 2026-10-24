@@ -11,8 +11,32 @@ export function groupPerformance(trades, selector, minimumSample = 5) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(trade);
   }
-  return [...groups].map(([name, items]) => ({ name, ...summarize(items), sampleAdequate: items.length >= minimumSample }))
+  return [...groups].map(([name, items]) => ({ name, ...summarize(items), payoffRatio: payoffStats(items).payoffRatio, sampleAdequate: items.length >= minimumSample }))
     .sort((a, b) => b.avgR - a.avgR || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+const localIsoDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const shiftDays = (date, amount) => { const next = new Date(date); next.setDate(next.getDate() + amount); return next; };
+const displayDate = (value) => value ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T12:00:00`)) : '';
+
+export function analyticsPeriodRange(mode = 'all', { from = '', to = '', now = new Date() } = {}) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (mode === 'today') { const value = localIsoDate(today); return { mode, from: value, to: value, label: `Hoje, ${displayDate(value)}`, invalid: false }; }
+  if (mode === 'week') { const mondayOffset = (today.getDay() + 6) % 7; const start = shiftDays(today, -mondayOffset); const end = shiftDays(start, 6); return { mode, from: localIsoDate(start), to: localIsoDate(end), label: `Esta semana: ${displayDate(localIsoDate(start))} a ${displayDate(localIsoDate(end))}`, invalid: false }; }
+  if (mode === 'month') { const start = new Date(today.getFullYear(), today.getMonth(), 1); const end = new Date(today.getFullYear(), today.getMonth() + 1, 0); return { mode, from: localIsoDate(start), to: localIsoDate(end), label: `Este mês: ${displayDate(localIsoDate(start))} a ${displayDate(localIsoDate(end))}`, invalid: false }; }
+  if (mode === 'last30') { const start = shiftDays(today, -29); return { mode, from: localIsoDate(start), to: localIsoDate(today), label: `Últimos 30 dias: ${displayDate(localIsoDate(start))} a ${displayDate(localIsoDate(today))}`, invalid: false }; }
+  if (mode === 'year') { const start = `${today.getFullYear()}-01-01`; const end = `${today.getFullYear()}-12-31`; return { mode, from: start, to: end, label: `Ano de ${today.getFullYear()}`, invalid: false }; }
+  if (mode === 'custom') {
+    const invalid = Boolean(from && to && from > to);
+    const label = from && to ? `${displayDate(from)} a ${displayDate(to)}` : from ? `A partir de ${displayDate(from)}` : to ? `Até ${displayDate(to)}` : 'Período personalizado';
+    return { mode, from, to, label, invalid };
+  }
+  return { mode: 'all', from: '', to: '', label: 'Todo o período', invalid: false };
+}
+
+export function filterTradesByPeriod(trades, period) {
+  if (period?.invalid) return [];
+  return trades.filter((trade) => (!period?.from || trade.closedDate >= period.from) && (!period?.to || trade.closedDate <= period.to));
 }
 
 export function rankedPerformance(groups, limit = 5) {

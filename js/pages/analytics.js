@@ -1,7 +1,7 @@
 import { accountPerformance, costStats, drawdownStats, groupPerformance, monthlyPerformance, payoffStats, rDistribution, rankedPerformance, recentComparison, streakStats, weekdayPerformance } from '../domain/analytics.js';
 import { netPnlCents, summarize, tradeR } from '../domain/trading.js';
 import { fromCents, money, round, signed } from '../domain/money.js';
-import { empty, esc, helpLabel, helpMetric } from '../ui/html.js';
+import { empty, esc, helpLabel, helpMetric, opts } from '../ui/html.js';
 
 const pf = (value) => value === Infinity ? '∞' : Number(value || 0).toFixed(2);
 const sectionTitle = (label, id, help) => `<h2 class="section-title">${helpLabel(label, id, help)}</h2>`;
@@ -11,11 +11,14 @@ const rankingTable = (rows, label) => rows.length ? `<div class="table-wrap"><ta
 
 const performanceTable = (items, firstLabel, nameKey = 'name') => items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>${esc(firstLabel)}</th><th>Trades</th><th>PnL</th><th>R</th><th>R/trade</th><th>Win rate</th><th>PF</th></tr></thead><tbody>${items.map((item) => `<tr><td><b>${esc(item[nameKey])}</b></td><td>${item.count}</td><td>${money(item.pnlCents)}</td><td>${signed(item.r, 'R')}</td><td>${signed(item.avgR, 'R')}</td><td>${item.winRate}%</td><td>${pf(item.profitFactor)}</td></tr>`).join('')}</tbody></table></div>` : empty('Sem operações para analisar.');
 
-export function renderAnalytics({ db, trades, accounts }) {
+const assetTable = (items) => items.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Ativo</th><th>Trades</th><th>Resultado</th><th>R total</th><th>R/trade</th><th>Expectativa</th><th>Win rate</th><th>PF</th><th>Payoff</th></tr></thead><tbody>${[...items].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map((item) => `<tr><td><b>${esc(item.name)}</b>${sampleBadge(item.sampleAdequate)}</td><td>${item.count}</td><td>${money(item.pnlCents)}</td><td>${signed(item.r, 'R')}</td><td>${signed(item.avgR, 'R')}</td><td>${money(item.expectancyCents)}</td><td>${item.winRate}%</td><td>${pf(item.profitFactor)}</td><td>${item.payoffRatio === Infinity ? '∞' : item.payoffRatio.toFixed(2)}</td></tr>`).join('')}</tbody></table></div>` : empty('Nenhum ativo operado neste período.');
+
+export function renderAnalytics({ db, trades, accounts, period = { mode: 'all', label: 'Todo o período', customFrom: '', customTo: '', invalid: false } }) {
   const items = [...trades].sort((a, b) => a.closedDate.localeCompare(b.closedDate)); const stats = summarize(items); let cumulativeR = 0; let cumulativePnl = 0;
   const rCurve = [0, ...items.map((trade) => round(cumulativeR += tradeR(trade) || 0))];
   const pnlCurve = [0, ...items.map((trade) => fromCents(cumulativePnl += netPnlCents(trade)))];
-  const symbols = rankedPerformance(groupPerformance(items, (trade) => trade.symbol));
+  const assetGroups = groupPerformance(items, (trade) => trade.symbol);
+  const symbols = rankedPerformance(assetGroups);
   const strategies = rankedPerformance(groupPerformance(items, (trade) => trade.strategy || 'Sem estratégia'));
   const streaks = streakStats(items); const payoff = payoffStats(items); const distribution = rDistribution(items);
   const startingCapital = accounts.reduce((sum, account) => sum + Number(account.initialBalanceCents || 0), 0);
@@ -33,9 +36,12 @@ export function renderAnalytics({ db, trades, accounts }) {
       monthly: { values: months.map((item) => item.r), labels: months.map((item) => item.label) },
     },
     html: `<div class="stack">
+      <section class="card analytics-period"><div class="row"><div>${sectionTitle('Período analisado', 'help-analytics-period', 'O filtro de período é aplicado a todos os indicadores, gráficos, rankings, ativos, estratégias, custos e comparações desta página. O filtro de conta do topo continua funcionando em conjunto.')}<p class="helper">${esc(period.label)} • ${items.length} operação(ões)</p></div><div class="analytics-period-controls"><label>Período<select data-analytics-period>${opts([['all', 'Todo o período'], ['today', 'Hoje'], ['week', 'Esta semana'], ['month', 'Este mês'], ['last30', 'Últimos 30 dias'], ['year', 'Este ano'], ['custom', 'Personalizado']], period.mode)}</select></label>${period.mode === 'custom' ? `<label>De<input type="date" data-analytics-date="from" value="${esc(period.customFrom || '')}"></label><label>Até<input type="date" data-analytics-date="to" value="${esc(period.customTo || '')}"></label>` : ''}</div></div>${period.invalid ? '<p class="alert danger">A data inicial precisa ser anterior ou igual à data final.</p>' : ''}</section>
       <section class="metric-grid">${helpMetric('R acumulado', signed(stats.r, 'R'), `${stats.count} operações`, 'help-total-r', 'Soma do resultado de todas as operações dividido pelo risco inicial de cada uma. Permite comparar desempenho mesmo quando o valor arriscado muda.')}${helpMetric('R médio', signed(stats.avgR, 'R'), 'Por operação', 'help-average-r', 'Resultado médio por trade medido em unidades de risco. Acima de zero indica vantagem histórica; quanto maior e mais estável, melhor.')}${helpMetric('Profit factor', pf(stats.profitFactor), 'Ganhos ÷ perdas', 'help-analytics-pf', 'Soma dos ganhos líquidos dividida pela soma das perdas líquidas. Acima de 1 é positivo; avalie sempre junto da quantidade de trades.')}${helpMetric('Expectativa', money(stats.expectancyCents), 'Resultado médio por trade', 'help-analytics-expectancy', 'Quanto cada operação produziu em média depois de taxas, comissão e swap. Uma expectativa positiva precisa se manter em uma amostra suficiente.')}</section>
 
       <div class="two-col"><section class="card">${sectionTitle('R acumulado', 'help-r-curve', 'Curva que soma o resultado em R após cada operação. Uma subida relativamente estável indica consistência; quedas longas indicam períodos de perda.')}<canvas id="rChart" role="img" aria-label="Curva de R acumulado"></canvas></section><section class="card">${sectionTitle('PnL acumulado', 'help-pnl-curve', 'Evolução do resultado líquido realizado em dinheiro, já descontando custos, comissão e swap.')}<canvas id="pnlChart" role="img" aria-label="Curva de PnL acumulado"></canvas></section></div>
+
+      <section class="card">${sectionTitle('Resultado detalhado por ativo', 'help-assets-detail', 'Mostra separadamente todos os ativos operados no período selecionado. Expectativa é o resultado líquido médio por trade; PF é a soma dos ganhos dividida pelas perdas; payoff compara o ganho médio com a perda média.')}<p class="helper">Todos os instrumentos aparecem abaixo, mesmo quando ainda possuem menos de cinco operações.</p>${assetTable(assetGroups)}</section>
 
       <section class="card">${sectionTitle('Melhores e piores desempenhos', 'help-rankings', 'Os rankings usam R médio por trade para não favorecer apenas o ativo ou estratégia mais operado. São exigidos cinco trades por grupo; abaixo disso o resultado é marcado como amostra baixa.')}${sampleWarning}<div class="ranking-grid"><div><h3>Melhores ativos</h3>${rankingTable(symbols.best, 'Ativo')}</div><div><h3>Piores ativos</h3>${rankingTable(symbols.worst, 'Ativo')}</div><div><h3>Melhores estratégias</h3>${rankingTable(strategies.best, 'Estratégia')}</div><div><h3>Piores estratégias</h3>${rankingTable(strategies.worst, 'Estratégia')}</div></div></section>
 

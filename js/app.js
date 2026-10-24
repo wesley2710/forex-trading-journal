@@ -1,6 +1,7 @@
 import { appConfig } from './config.js';
 import { barChart, lineChart } from './charts.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
+import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
 import { normalizeTrade } from './domain/schema.js';
 import { isoDate, netPnlCents, summarize, tradeR, uid } from './domain/trading.js';
@@ -29,6 +30,7 @@ let calendarMode = 'month';
 let formHandler = null;
 let galleryUrls = [];
 const filters = { account: 'all', from: '', to: '', firm: '', symbol: '', strategy: '', side: '' };
+const analyticsFilter = { mode: 'all', from: '', to: '' };
 
 const access = new AccessService(appConfig);
 let sync = null;
@@ -75,7 +77,7 @@ function render() {
   else if (page === 'accounts') $('#app').innerHTML = renderAccounts({ db, showArchived });
   else if (page === 'trades') $('#app').innerHTML = renderTrades({ db, filters, accountName });
   else if (page === 'calendar') $('#app').innerHTML = renderCalendar({ trades: activeTrades(), year, month, mode: calendarMode });
-  else if (page === 'analytics') { const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected)); result = renderAnalytics({ db, trades: activeTrades(), accounts }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.charts.rCurve); lineChart($('#pnlChart'), result.charts.pnlCurve); lineChart($('#drawdownChart'), result.charts.drawdown); barChart($('#distributionChart'), result.charts.distribution.values, result.charts.distribution.labels); barChart($('#monthlyChart'), result.charts.monthly.values, result.charts.monthly.labels); }
+  else if (page === 'analytics') { const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected)); const period = { ...analyticsPeriodRange(analyticsFilter.mode, analyticsFilter), customFrom: analyticsFilter.from, customTo: analyticsFilter.to }; result = renderAnalytics({ db, trades: filterTradesByPeriod(activeTrades(), period), accounts, period }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.charts.rCurve); lineChart($('#pnlChart'), result.charts.pnlCurve); lineChart($('#drawdownChart'), result.charts.drawdown); barChart($('#distributionChart'), result.charts.distribution.values, result.charts.distribution.labels); barChart($('#monthlyChart'), result.charts.monthly.values, result.charts.monthly.labels); }
   else { $('#app').innerHTML = renderSettings({ db, remoteEnabled: access.configured, connected: access.connected, syncStatus, spreadsheetUrl: workspace?.spreadsheetUrl || appConfig.appsScript?.spreadsheetUrl }); bindImport(); }
   refreshSyncStatus();
 }
@@ -176,7 +178,11 @@ $('#nav').addEventListener('click', (event) => { const button = event.target.clo
 $('#accountFilter').onchange = (event) => { selected = event.target.value; filters.account = selected; render(); };
 $('#quickAdd').onclick = () => tradeForm();
 $('#menuButton').onclick = () => { const open = $('.sidebar').classList.toggle('open'); $('#menuButton').setAttribute('aria-expanded', String(open)); };
-$('#app').addEventListener('change', (event) => { if (event.target.dataset.filter) { filters[event.target.dataset.filter] = event.target.value; render(); } });
+$('#app').addEventListener('change', (event) => {
+  if (event.target.dataset.filter) { filters[event.target.dataset.filter] = event.target.value; render(); }
+  else if (event.target.dataset.analyticsPeriod !== undefined) { analyticsFilter.mode = event.target.value; render(); }
+  else if (event.target.dataset.analyticsDate) { analyticsFilter[event.target.dataset.analyticsDate] = event.target.value; render(); }
+});
 $('#app').addEventListener('click', async (event) => {
   const button = event.target.closest('button'); if (!button) return; if (button.dataset.goto) return setPage(button.dataset.goto); const action = button.dataset.action; const id = button.dataset.id; if (!action) return;
   try {

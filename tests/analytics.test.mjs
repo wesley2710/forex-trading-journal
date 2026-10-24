@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { accountPerformance, costStats, drawdownStats, groupPerformance, monthlyPerformance, payoffStats, rDistribution, rankedPerformance, recentComparison, streakStats, weekdayPerformance } from '../js/domain/analytics.js';
+import { accountPerformance, analyticsPeriodRange, costStats, drawdownStats, filterTradesByPeriod, groupPerformance, monthlyPerformance, payoffStats, rDistribution, rankedPerformance, recentComparison, streakStats, weekdayPerformance } from '../js/domain/analytics.js';
 import { renderAnalytics } from '../js/pages/analytics.js';
 
 const makeTrade = (pnl, date, overrides = {}) => ({ id: `${date}-${pnl}-${Math.random()}`, accountId: 'a', closedDate: date, closedAt: `${date}T12:00:00Z`, symbol: 'EUR/USD', strategy: 'Pullback', riskCents: 10000, grossPnlCents: pnl, feesCents: 0, commissionCents: 0, swapCents: 0, netPnlCents: pnl, ...overrides });
@@ -39,11 +39,27 @@ test('períodos, custos, contas e janela recente são resumidos', () => {
   assert.equal(recentComparison(trades, 1).recent.count, 1);
 });
 
+test('filtros de hoje, semana, mês, 30 dias, ano e personalizado limitam todos os trades', () => {
+  const now = new Date(2026, 9, 24, 12);
+  assert.deepEqual(analyticsPeriodRange('week', { now }), { mode: 'week', from: '2026-10-19', to: '2026-10-25', label: 'Esta semana: 19/10/2026 a 25/10/2026', invalid: false });
+  assert.equal(analyticsPeriodRange('month', { now }).from, '2026-10-01');
+  assert.equal(analyticsPeriodRange('last30', { now }).from, '2026-09-25');
+  assert.equal(analyticsPeriodRange('year', { now }).to, '2026-12-31');
+  const custom = analyticsPeriodRange('custom', { from: '2026-10-02', to: '2026-10-10', now });
+  const trades = [makeTrade(1000, '2026-10-01'), makeTrade(1000, '2026-10-05'), makeTrade(1000, '2026-10-11')];
+  assert.deepEqual(filterTradesByPeriod(trades, custom).map((trade) => trade.closedDate), ['2026-10-05']);
+  assert.equal(analyticsPeriodRange('custom', { from: '2026-10-10', to: '2026-10-02', now }).invalid, true);
+});
+
 test('página de estatísticas contém as dez análises e ajuda contextual', () => {
-  const trades = [makeTrade(20000, '2026-01-05'), makeTrade(-10000, '2026-01-06')];
+  const trades = [makeTrade(20000, '2026-01-05'), makeTrade(-10000, '2026-01-06', { symbol: 'NAS100' })];
   const db = { accounts: [account], trades, cashFlows: [] };
   const result = renderAnalytics({ db, trades, accounts: [account] });
   for (const text of ['Melhores e piores desempenhos', 'Sequências de resultados', 'Ganho, perda e payoff', 'Distribuição dos resultados em R', 'Drawdown completo', 'Resultados por mês', 'Desempenho por dia da semana', 'Impacto dos custos', 'Comparação entre contas', 'Desempenho recente']) assert.match(result.html, new RegExp(text));
+  assert.match(result.html, /Resultado detalhado por ativo/);
+  assert.match(result.html, /EUR\/USD/);
+  assert.match(result.html, /NAS100/);
+  assert.match(result.html, /data-analytics-period/);
   assert.ok((result.html.match(/class="info-trigger"/g) || []).length >= 15);
   assert.deepEqual(result.charts.distribution.labels, ['< −1R', '−1R a 0R', '0R a +1R', '+1R a +2R', '≥ +2R']);
 });

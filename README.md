@@ -9,6 +9,7 @@ Aplicação web pessoal e responsiva para registrar operações de Forex, acompa
 - Cadastro reutilizável de pares/ativos e estratégias, selecionados por lista para evitar variações de digitação.
 - PnL líquido em centavos, RR planejado, R realizado, expectativa, profit factor e drawdown.
 - Estatísticas avançadas com rankings por amostra, payoff, sequências, distribuição em R, drawdown completo, períodos, custos, comparação de contas e janela recente.
+- Resultado detalhado de cada ativo e filtros globais de estatísticas por dia, semana, mês, 30 dias, ano ou intervalo personalizado.
 - Payouts, taxas, movimentações e snapshots de balance/equity.
 - Calendários, drill-down diário, filtros, JSON, CSV e auditoria.
 - Cache local/offline e sincronização automática cerca de 900 ms após cada alteração.

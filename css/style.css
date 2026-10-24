@@ -81,6 +81,10 @@ footer { padding: 0 36px 25px; color: #6d7e97; font-size: 11px; }
 .summary-strip { display: flex; flex-wrap: wrap; gap: 9px 24px; margin: 15px 0 5px; padding: 12px 14px; border-radius: 9px; background: #0f1a29; color: #9fb1c6; font-size: 12px; }
 .summary-strip b { color: #e6eef8; }
 .data-table td small { display: block; margin-top: 4px; color: #8195ad; }
+.analytics-period .section-title { margin-bottom: 4px; }
+.analytics-period-controls { display: flex; flex-wrap: wrap; align-items: end; justify-content: flex-end; gap: 9px; }
+.analytics-period-controls label { display: grid; gap: 6px; color: #91a6c0; font-size: 11px; }
+.analytics-period-controls select, .analytics-period-controls input { min-width: 145px; }
 .empty { text-align: center; padding: 35px 15px; color: #a0aec0; }
 .empty strong { color: #e3edf8; display: block; margin: 6px; }
 .cal-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -159,6 +163,9 @@ code { color: #77e4c7; background: #0b1624; padding: 2px 5px; border-radius: 5px
   .two-col, .grid-cards, .ranking-grid { grid-template-columns: 1fr; }
   .preset-grid { grid-template-columns: 1fr; }
   .filters > * { flex: 1 1 140px; }
+  .analytics-period-controls { width: 100%; justify-content: stretch; }
+  .analytics-period-controls label { flex: 1 1 145px; }
+  .analytics-period-controls select, .analytics-period-controls input { width: 100%; }
   .day { min-height: 85px; padding: 7px; }
   .day-result { font-size: 11px; }
   .day small { font-size: 9px; }
