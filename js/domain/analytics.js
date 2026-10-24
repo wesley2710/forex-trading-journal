@@ -36,8 +36,10 @@ export function analyticsPeriodRange(mode = 'all', { from = '', to = '', now = n
 
 export function filterTradesByPeriod(trades, period) {
   if (period?.invalid) return [];
-  return trades.filter((trade) => (!period?.from || trade.closedDate >= period.from) && (!period?.to || trade.closedDate <= period.to));
+  return trades.filter((trade) => dateInPeriod(trade.closedDate, period));
 }
+
+export function dateInPeriod(value, period) { return Boolean(value) && !period?.invalid && (!period?.from || value >= period.from) && (!period?.to || value <= period.to); }
 
 export function rankedPerformance(groups, limit = 5) {
   const adequate = groups.filter((item) => item.sampleAdequate);

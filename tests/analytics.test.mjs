@@ -59,7 +59,7 @@ test('página de estatísticas contém as dez análises e ajuda contextual', () 
   assert.match(result.html, /Resultado detalhado por ativo/);
   assert.match(result.html, /EUR\/USD/);
   assert.match(result.html, /NAS100/);
-  assert.match(result.html, /data-analytics-period/);
+  assert.match(result.html, /data-performance-period/);
   assert.ok((result.html.match(/class="info-trigger"/g) || []).length >= 15);
   assert.deepEqual(result.charts.distribution.labels, ['< −1R', '−1R a 0R', '0R a +1R', '+1R a +2R', '≥ +2R']);
 });
