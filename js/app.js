@@ -1,5 +1,5 @@
 import { appConfig } from './config.js';
-import { lineChart } from './charts.js';
+import { barChart, lineChart } from './charts.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
 import { normalizeTrade } from './domain/schema.js';
@@ -47,7 +47,6 @@ const pageMeta = {
 const accountName = (id) => db.accounts.find((account) => account.id === id)?.name || 'Conta removida';
 const accountOptions = () => db.accounts.filter((account) => !account.archived).map((account) => [account.id, account.name]);
 const activeTrades = () => db.trades.filter((trade) => selected === 'all' || trade.accountId === selected);
-const filteredTrades = () => activeTrades().filter((trade) => (!filters.from || trade.closedDate >= filters.from) && (!filters.to || trade.closedDate <= filters.to) && (!filters.symbol || trade.symbol === filters.symbol) && (!filters.strategy || trade.strategy === filters.strategy) && (!filters.side || trade.side === filters.side));
 
 function toast(message) { const element = $('#toast'); element.textContent = message; element.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => element.classList.remove('show'), 3300); }
 function refreshSyncStatus(detail = '') {
@@ -76,7 +75,7 @@ function render() {
   else if (page === 'accounts') $('#app').innerHTML = renderAccounts({ db, showArchived });
   else if (page === 'trades') $('#app').innerHTML = renderTrades({ db, filters, accountName });
   else if (page === 'calendar') $('#app').innerHTML = renderCalendar({ trades: activeTrades(), year, month, mode: calendarMode });
-  else if (page === 'analytics') { result = renderAnalytics({ trades: filteredTrades() }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.rCurve); lineChart($('#pnlChart'), result.pnlCurve); }
+  else if (page === 'analytics') { const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected)); result = renderAnalytics({ db, trades: activeTrades(), accounts }); $('#app').innerHTML = result.html; lineChart($('#rChart'), result.charts.rCurve); lineChart($('#pnlChart'), result.charts.pnlCurve); lineChart($('#drawdownChart'), result.charts.drawdown); barChart($('#distributionChart'), result.charts.distribution.values, result.charts.distribution.labels); barChart($('#monthlyChart'), result.charts.monthly.values, result.charts.monthly.labels); }
   else { $('#app').innerHTML = renderSettings({ db, remoteEnabled: access.configured, connected: access.connected, syncStatus, spreadsheetUrl: workspace?.spreadsheetUrl || appConfig.appsScript?.spreadsheetUrl }); bindImport(); }
   refreshSyncStatus();
 }

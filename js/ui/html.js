@@ -4,6 +4,8 @@ import { plannedRR, tradeR, netPnlCents } from '../domain/trading.js';
 export const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 export const opts = (items, selected) => items.map(([id, label]) => `<option value="${esc(id)}" ${id === selected ? 'selected' : ''}>${esc(label)}</option>`).join('');
 export const metric = (label, value, sub = '') => `<div class="card"><div class="eyebrow">${esc(label)}</div><div class="metric">${value}</div><div class="small muted">${esc(sub)}</div></div>`;
+export const helpLabel = (label, id, help) => `<span class="indicator-label">${esc(label)}<span class="info-tip"><button class="info-trigger" type="button" aria-label="Ajuda sobre ${esc(label)}" aria-describedby="${esc(id)}">?</button><span class="info-tooltip" id="${esc(id)}" role="tooltip">${esc(help)}</span></span></span>`;
+export const helpMetric = (label, value, sub, id, help) => `<div class="card"><div class="eyebrow">${helpLabel(label, id, help)}</div><div class="metric">${value}</div><div class="small muted">${esc(sub)}</div></div>`;
 export const empty = (message, action = '', label = 'Começar agora') => `<div class="empty"><strong>Nenhum dado ainda</strong>${esc(message)}${action ? `<br><button class="primary" data-action="${action}">${esc(label)}</button>` : ''}</div>`;
 export const currency = (cents) => `<span class="${Number(cents) > 0 ? 'green' : Number(cents) < 0 ? 'red' : 'neutral'}">${Number(cents) > 0 ? '+' : ''}${money(cents)}</span>`;
 export const rfmt = (number) => `<span class="${number > 0 ? 'green' : number < 0 ? 'red' : 'neutral'}">${number == null ? '—' : signed(number, 'R')}</span>`;
