@@ -62,6 +62,13 @@ footer { padding: 0 36px 25px; color: #6d7e97; font-size: 11px; }
 .actions { display: flex; gap: 6px; }
 .actions button { background: transparent; border: 1px solid #34455a; color: #b9c9dc; border-radius: 7px; padding: 6px 8px; min-height: 34px; }
 .action-wrap { flex-wrap: wrap; margin-top: 15px; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.preset-panel { border: 1px solid #2b3b50; background: #0f1a29; border-radius: 11px; padding: 15px; min-width: 0; }
+.preset-panel h3 { margin: 0; font-size: 14px; }
+.preset-list { display: grid; gap: 7px; margin-top: 13px; }
+.preset-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 9px 0; border-top: 1px solid #243449; }
+.preset-item strong { overflow-wrap: anywhere; font-size: 13px; }
+.preset-empty { padding: 24px 10px 8px; font-size: 12px; }
 .empty { text-align: center; padding: 35px 15px; color: #a0aec0; }
 .empty strong { color: #e3edf8; display: block; margin: 6px; }
 .cal-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -138,6 +145,7 @@ code { color: #77e4c7; background: #0b1624; padding: 2px 5px; border-radius: 5px
   .toolbar .primary { white-space: nowrap; }
   main { padding: 18px; }
   .two-col, .grid-cards { grid-template-columns: 1fr; }
+  .preset-grid { grid-template-columns: 1fr; }
   .filters > * { flex: 1 1 140px; }
   .day { min-height: 85px; padding: 7px; }
   .day-result { font-size: 11px; }
