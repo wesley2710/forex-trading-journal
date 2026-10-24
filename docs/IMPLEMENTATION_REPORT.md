@@ -22,7 +22,8 @@
 ## Configuração externa
 
 - Planilha `Forex Trading Journal Data` reutilizada.
-- Apps Script instalado como script vinculado e implantado como Web App na versão 1.
+- Apps Script instalado como script vinculado e implantado como Web App na versão 2.
+- Serviço avançado do Drive v3 ativado para disponibilizar a API no projeto padrão, mantendo o escopo limitado `drive.file`.
 - `FOREX_JOURNAL_TOKEN` configurado nas propriedades privadas do projeto.
 - URL `/exec` registrada em `js/config.js`; resta informar o segredo uma vez no navegador autorizado.
 
