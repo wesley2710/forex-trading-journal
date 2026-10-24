@@ -29,3 +29,15 @@ test('filtro do dashboard altera desempenho sem distorcer o saldo atual', () => 
   assert.doesNotMatch(html, />OLD</);
   assert.deepEqual(chart, [10100, 10050]);
 });
+
+test('saque aparece no saldo, mas não vira drawdown operacional', () => {
+  const account = { id: 'a', name: 'Conta', status: 'Ativa', archived: false, initialBalanceCents: 10000000, profitTargetCents: 1000000, dailyLossLimitCents: 500000, maxLossLimitCents: 1000000, lossBasis: 'balance', timezone: 'UTC' };
+  const trade = { id: 't', accountId: 'a', closedDate: '2026-10-20', closedAt: '2026-10-20T12:00:00Z', symbol: 'NAS100', riskCents: 100000, grossPnlCents: 250000, feesCents: 0, commissionCents: 0, swapCents: 0, netPnlCents: 250000, screenshots: [] };
+  const flow = { id: 'payout-flow-p', accountId: 'a', date: '2026-10-21', occurredAt: '2026-10-21T12:00:00Z', amountCents: -250000, affectsBalance: true, source: 'payout', sourceId: 'p' };
+  const payout = { id: 'p', accountId: 'a', date: '2026-10-21', grossCents: 250000, traderSharePercent: 80, netCents: 200000, status: 'received' };
+  const db = { accounts: [account], trades: [trade], cashFlows: [flow], payouts: [payout], snapshots: [] };
+  const { html, chart } = renderDashboard({ db, selected: 'all', accountName: () => 'Conta' });
+  assert.deepEqual(chart, [100000, 102500, 100000]);
+  assert.match(html, /Saques e outras movimentações não são tratados como perdas/);
+  assert.match(html, /\+2,50R/);
+});

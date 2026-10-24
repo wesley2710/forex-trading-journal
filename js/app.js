@@ -3,7 +3,7 @@ import { barChart, lineChart } from './charts.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
 import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
-import { payoutDate, payoutGrossCents, payoutNetCents, payoutSharePercent } from './domain/payouts.js';
+import { payoutCashFlow, payoutCashFlowId, payoutDate, payoutGrossCents, payoutNetCents, payoutSharePercent, reconcilePayoutCashFlows } from './domain/payouts.js';
 import { normalizeTrade } from './domain/schema.js';
 import { isoDate, netPnlCents, summarize, tradeR, uid } from './domain/trading.js';
 import { validateAccount, validateTrade } from './domain/validation.js';
@@ -22,6 +22,7 @@ import { esc, field, opts, selectField, textArea } from './ui/html.js';
 const $ = (selector) => document.querySelector(selector);
 const localRepository = new LocalRepository();
 let db = localRepository.load();
+if (reconcilePayoutCashFlows(db)) db = localRepository.save(db);
 let page = 'dashboard';
 let selected = 'all';
 let showArchived = false;
@@ -43,6 +44,12 @@ if (access.configured) {
   sync = new SyncService(localRepository, workspace);
   sync.addEventListener('status', (event) => { syncStatus = event.detail.status; refreshSyncStatus(event.detail.detail); if (page === 'settings') render(); });
   access.addEventListener('change', () => { syncStatus = access.connected ? 'conferindo a nuvem' : 'aguardando configuração'; refreshSyncStatus(); if (page === 'settings') render(); });
+}
+
+function persistPayoutBalanceLinks() {
+  if (!reconcilePayoutCashFlows(db)) return;
+  db = localRepository.save(db);
+  if (access.connected && sync) sync.schedule(() => db, (next) => { db = next; if (page === 'settings') render(); });
 }
 
 const pageMeta = {
@@ -144,7 +151,8 @@ function payoutForm(accountId, payoutId) {
     if (!Number.isFinite(traderSharePercent) || traderSharePercent < 0 || traderSharePercent > 100) throw new Error('A porcentagem deve ficar entre 0% e 100%.');
     const netCents = Math.round(gross * traderSharePercent / 100); const now = new Date().toISOString();
     const payout = { ...existing, id: payoutId || uid(), accountId: values.accountId, date: values.payoutDate, grossCents: gross, traderSharePercent, netCents, status: 'received', requestedAt: values.payoutDate, receivedAt: values.payoutDate, requestedCents: gross, receivedCents: netCents, notes: values.notes.trim(), createdAt: existing?.createdAt || now, updatedAt: now, version: Number(existing?.version || 0) + 1 };
-    commit(() => { if (payoutId) db.payouts = db.payouts.map((item) => item.id === payoutId ? payout : item); else db.payouts.push(payout); }, payoutId ? 'update' : 'create', 'payouts');
+    const previousFlow = db.cashFlows.find((flow) => flow.id === payoutCashFlowId(payout.id) || (flow.source === 'payout' && flow.sourceId === payout.id)); const flow = payoutCashFlow(payout, Number(previousFlow?.version || 0) + 1);
+    commit(() => { if (payoutId) db.payouts = db.payouts.map((item) => item.id === payoutId ? payout : item); else db.payouts.push(payout); if (previousFlow) db.cashFlows = db.cashFlows.map((item) => item.id === previousFlow.id ? { ...previousFlow, ...flow } : item); else db.cashFlows.push(flow); }, payoutId ? 'update' : 'create', 'payouts');
   });
   updatePayoutPreview();
 }
@@ -177,7 +185,7 @@ async function deleteTrade(tradeId) {
 }
 
 function exportCsv() { const columns = ['closedDate', 'accountId', 'symbol', 'side', 'entry', 'stopLoss', 'takeProfit', 'exit', 'lots', 'riskCents', 'plannedRewardCents', 'grossPnlCents', 'feesCents', 'swapCents', 'commissionCents', 'netPnlCents', 'strategy', 'notes']; const rows = [columns.join(','), ...db.trades.map((trade) => columns.map((key) => `"${String(trade[key] ?? '').replace(/"/g, '""')}"`).join(','))]; download('forex-trades.csv', `\ufeff${rows.join('\r\n')}`, 'text/csv;charset=utf-8'); }
-function bindImport() { const input = $('#importFile'); if (!input) return; input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = validateImport(JSON.parse(await file.text())); if (confirm('Substituir todos os dados locais pelo backup validado?')) { db = localRepository.replace(imported); selected = 'all'; toast('Backup importado.'); render(); } } catch (error) { alert(error.message); } }; }
+function bindImport() { const input = $('#importFile'); if (!input) return; input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = validateImport(JSON.parse(await file.text())); reconcilePayoutCashFlows(imported); if (confirm('Substituir todos os dados locais pelo backup validado?')) { db = localRepository.replace(imported); selected = 'all'; toast('Backup importado.'); render(); } } catch (error) { alert(error.message); } }; }
 
 $('#entityForm').addEventListener('input', (event) => { if (['payoutGross', 'traderSharePercent'].includes(event.target.name)) updatePayoutPreview(); });
 $('#entityForm').addEventListener('change', (event) => { if (event.target.name === 'accountId' && $('#payoutNetPreview')) { const account = db.accounts.find((item) => item.id === event.target.value); const share = document.querySelector('[name="traderSharePercent"]'); if (account && share) share.value = Number(account.profitSplit ?? 80); updatePayoutPreview(); } });
@@ -214,7 +222,7 @@ $('#app').addEventListener('click', async (event) => {
   try {
     if (action === 'new-account') accountForm(); else if (action === 'edit-account') accountForm(id); else if (action === 'toggle-archived') { showArchived = !showArchived; render(); }
     else if (action === 'archive-account') commit(() => { const account = db.accounts.find((item) => item.id === id); account.archived = !account.archived; account.updatedAt = new Date().toISOString(); }, 'archive-toggle', 'accounts');
-    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque?')) commit(() => { db.payouts = db.payouts.filter((item) => item.id !== id); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
+    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque e restaurar o valor bruto ao saldo atual?')) commit(() => { db.payouts = db.payouts.filter((item) => item.id !== id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== payoutCashFlowId(id) && !(flow.source === 'payout' && flow.sourceId === id)); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
     else if (action === 'new-trade') tradeForm(); else if (action === 'edit-trade') tradeForm(id); else if (action === 'view-screenshots') await showScreenshots(id); else if (action === 'delete-trade') await deleteTrade(id);
     else if (action === 'add-preset') presetForm(button.dataset.kind);
     else if (action === 'edit-preset') presetForm(button.dataset.kind, button.dataset.value);
@@ -226,7 +234,7 @@ $('#app').addEventListener('click', async (event) => {
     else if (action === 'configure-access') accessForm();
     else if (action === 'forget-access') { access.clear(); syncStatus = 'aguardando configuração'; render(); }
     else if (action === 'sync-now') { db = await sync.flush(() => db, (next) => { db = next; }); render(); }
-    else if (action === 'sync-pull') { if (confirm('Substituir a cópia local pela versão da sua planilha Google?')) { db = await sync.pull(); render(); } }
+    else if (action === 'sync-pull') { if (confirm('Substituir a cópia local pela versão da sua planilha Google?')) { db = await sync.pull(); persistPayoutBalanceLinks(); render(); } }
   } catch (error) { toast(error.message); }
 });
 window.addEventListener('resize', () => { if (page === 'dashboard' || page === 'analytics') render(); });
@@ -234,7 +242,7 @@ function accessForm() {
   modal('Configurar acesso automático', field('secret', 'Segredo pessoal', 'password', '', 'required minlength="32" autocomplete="current-password"') + '<p class="helper full">Digite o segredo configurado no Apps Script. Ele ficará salvo somente neste navegador.</p>', async (values) => {
     access.setToken(values.secret);
     syncStatus = 'conferindo a nuvem';
-    try { db = await sync.bootstrap(db); }
+    try { db = await sync.bootstrap(db); persistPayoutBalanceLinks(); }
     catch (error) { if (error.code === 'UNAUTHORIZED' || error.code === 'AUTH_NOT_CONFIGURED') access.clear(); throw error; }
     render();
   });
@@ -242,7 +250,7 @@ function accessForm() {
 
 async function bootstrapRemote() {
   if (!access.connected || !sync) return;
-  try { db = await sync.bootstrap(db); render(); }
+  try { db = await sync.bootstrap(db); persistPayoutBalanceLinks(); render(); }
   catch (error) { toast(error.message); refreshSyncStatus(error.message); }
 }
 

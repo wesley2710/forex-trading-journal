@@ -10,7 +10,7 @@ const presetList = (db, kind, emptyMessage) => {
 };
 
 export function renderSettings({ db, remoteEnabled, connected, syncStatus, spreadsheetUrl = '' }) {
-  const flows = [...db.cashFlows].sort((a, b) => b.date.localeCompare(a.date));
+  const flows = db.cashFlows.filter((flow) => flow.source !== 'payout').sort((a, b) => b.date.localeCompare(a.date));
   const payouts = db.payouts.filter(isCompletedPayout).sort((a, b) => payoutDate(b).localeCompare(payoutDate(a)));
   const fees = [...db.fees].sort((a, b) => b.date.localeCompare(a.date));
   const accountName = (id) => db.accounts.find((item) => item.id === id)?.name || 'Conta removida';

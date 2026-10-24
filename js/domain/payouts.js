@@ -17,6 +17,23 @@ export function payoutNetCents(payout) {
 
 export const payoutFirmCents = (payout) => Math.max(0, payoutGrossCents(payout) - payoutNetCents(payout));
 export const isCompletedPayout = (payout) => Number.isInteger(payout.grossCents) || payout.status === 'received';
+export const payoutCashFlowId = (payoutId) => `payout-flow-${payoutId}`;
+
+export function payoutCashFlow(payout, version = 1) {
+  const date = payoutDate(payout);
+  return { id: payoutCashFlowId(payout.id), accountId: payout.accountId, date, occurredAt: `${date}T12:00:00Z`, type: 'payout', amountCents: -payoutGrossCents(payout), affectsBalance: true, notes: 'Saque bruto vinculado ao histórico de saques.', source: 'payout', sourceId: payout.id, version };
+}
+
+export function reconcilePayoutCashFlows(db) {
+  let changed = false;
+  for (const payout of db.payouts.filter((item) => Number.isInteger(item.grossCents))) {
+    const id = payoutCashFlowId(payout.id); const index = db.cashFlows.findIndex((flow) => flow.id === id || (flow.source === 'payout' && flow.sourceId === payout.id));
+    if (index < 0) { db.cashFlows.push(payoutCashFlow(payout)); changed = true; continue; }
+    const current = db.cashFlows[index]; const expected = payoutCashFlow(payout, Number(current.version || 0) + 1);
+    if (current.accountId !== expected.accountId || current.date !== expected.date || current.amountCents !== expected.amountCents || current.affectsBalance !== true) { db.cashFlows[index] = { ...current, ...expected }; changed = true; }
+  }
+  return changed;
+}
 
 export function payoutSummary(payouts) {
   const items = payouts.filter(isCompletedPayout);

@@ -138,8 +138,9 @@ export function costStats(trades) {
 export function accountPerformance(accounts, trades, cashFlows = []) {
   return accounts.map((account) => {
     const items = trades.filter((trade) => trade.accountId === account.id); const stats = summarize(items);
-    const balanceCents = operationalBalanceCents(account, items, cashFlows.filter((flow) => flow.accountId === account.id));
-    const lossUsedCents = Math.max(0, Number(account.initialBalanceCents || 0) - balanceCents);
+    const accountFlows = cashFlows.filter((flow) => flow.accountId === account.id); const balanceCents = operationalBalanceCents(account, items, accountFlows);
+    const riskBalanceCents = operationalBalanceCents(account, items, accountFlows.filter((flow) => flow.source !== 'payout'));
+    const lossUsedCents = Math.max(0, Number(account.initialBalanceCents || 0) - riskBalanceCents);
     return { id: account.id, name: account.name, status: account.status, ...stats, balanceCents, drawdownCents: drawdownStats(items, account.initialBalanceCents).maxCents, targetProgress: account.profitTargetCents > 0 ? round(stats.pnlCents / account.profitTargetCents * 100) : null, lossBufferCents: account.maxLossLimitCents > 0 ? Math.max(0, account.maxLossLimitCents - lossUsedCents) : null, days: new Set(items.map((trade) => trade.closedDate)).size };
   }).sort((a, b) => b.r - a.r);
 }
