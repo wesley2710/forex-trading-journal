@@ -1,3 +1,5 @@
+import { mergeDatabases } from '../domain/sync-merge.js';
+
 export class SyncService extends EventTarget {
   constructor(local, remote) { super(); this.local = local; this.remote = remote; this.status = 'local'; this.lastSync = null; this.timer = null; this.running = false; this.queued = false; }
   update(status, detail = '') { this.status = status; this.dispatchEvent(new CustomEvent('status', { detail: { status, detail, lastSync: this.lastSync } })); }
@@ -8,8 +10,21 @@ export class SyncService extends EventTarget {
   }
   async push(db) {
     this.update('syncing', 'Enviando dados');
-    try { const remote = await this.remote.save(db); const next = { ...db, remoteRevision: remote.revision, syncedRevision: Number(db.revision || 0) }; this.lastSync = new Date().toISOString(); this.update('synced'); return next; }
-    catch (error) { this.update(error.code === 'conflict' ? 'conflict' : 'error', error.message); throw error; }
+    let candidate = db;
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const saved = await this.remote.save(candidate);
+          const next = { ...candidate, remoteRevision: saved.revision, syncedRevision: Number(candidate.revision || 0) };
+          this.lastSync = new Date().toISOString(); this.update('synced'); return next;
+        } catch (error) {
+          if (error.code !== 'conflict' || attempt === 2) throw error;
+          this.update('merging', 'Combinando alterações locais e da nuvem');
+          const remote = await this.remote.load();
+          candidate = { ...mergeDatabases(candidate, remote.data), revision: Math.max(Number(candidate.revision || 0), Number(remote.data.revision || 0)) + 1, remoteRevision: remote.revision };
+        }
+      }
+    } catch (error) { this.update(error.code === 'conflict' ? 'conflict' : 'error', error.message); throw error; }
   }
 
   schedule(getDatabase, onSynced, delay = 900) {
@@ -28,7 +43,7 @@ export class SyncService extends EventTarget {
       const latest = getDatabase();
       const persisted = Number(latest.revision || 0) === Number(snapshot.revision || 0)
         ? this.local.replace(next)
-        : this.local.replace({ ...latest, remoteRevision: next.remoteRevision, syncedRevision: next.syncedRevision });
+        : this.local.replace({ ...mergeDatabases(latest, next), revision: latest.revision, remoteRevision: next.remoteRevision, syncedRevision: next.syncedRevision });
       if (persisted !== next) this.queued = true;
       onSynced(persisted);
       return persisted;
@@ -44,8 +59,9 @@ export class SyncService extends EventTarget {
     const pending = Number(localDb.revision || 0) > Number(localDb.syncedRevision || 0);
     if (pending) {
       if (Number(remote.revision || 0) !== Number(localDb.remoteRevision || 0)) {
-        const error = Object.assign(new Error('Existem alterações locais e remotas. Escolha qual versão manter em Configurações.'), { code: 'conflict' });
-        this.update('conflict', error.message); throw error;
+        this.update('merging', 'Combinando alterações locais e da nuvem');
+        const merged = { ...mergeDatabases(localDb, remote.data), revision: Math.max(Number(localDb.revision || 0), Number(remote.data.revision || 0)) + 1, remoteRevision: remote.revision };
+        return this.local.replace(await this.push(merged));
       }
       return this.local.replace(await this.push(localDb));
     }

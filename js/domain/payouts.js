@@ -21,7 +21,7 @@ export const payoutCashFlowId = (payoutId) => `payout-flow-${payoutId}`;
 
 export function payoutCashFlow(payout, version = 1) {
   const date = payoutDate(payout);
-  return { id: payoutCashFlowId(payout.id), accountId: payout.accountId, date, occurredAt: `${date}T12:00:00Z`, type: 'payout', amountCents: -payoutGrossCents(payout), affectsBalance: true, notes: 'Saque bruto vinculado ao histórico de saques.', source: 'payout', sourceId: payout.id, version };
+  return { id: payoutCashFlowId(payout.id), accountId: payout.accountId, date, occurredAt: `${date}T12:00:00Z`, type: 'payout', amountCents: -payoutGrossCents(payout), affectsBalance: true, notes: 'Saque bruto vinculado ao histórico de saques.', source: 'payout', sourceId: payout.id, createdAt: payout.createdAt, updatedAt: payout.updatedAt, version };
 }
 
 export function reconcilePayoutCashFlows(db) {

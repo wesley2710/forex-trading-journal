@@ -18,7 +18,7 @@ nav button:hover, nav button.active { color: #e7f8f5; background: #1c303c; }
 .aside-bottom { margin-top: auto; border-top: 1px solid #2a3547; padding: 18px 10px; color: #a5b8cb; font-size: 12px; }
 .aside-bottom small { display: block; line-height: 1.4; margin-top: 8px; color: #70839d; }
 .status-dot { display: inline-block; background: #4ce1ac; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-.status-dot.syncing { background: #e4b765; }
+.status-dot.syncing, .status-dot.merging, .status-dot.pending { background: #e4b765; }
 .status-dot.error, .status-dot.conflict { background: #ff8491; }
 .main-wrap { min-width: 0; flex: 1; }
 .topbar { padding: 30px 36px; display: flex; justify-content: space-between; gap: 18px; align-items: center; border-bottom: 1px solid #202d40; }

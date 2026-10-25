@@ -5,6 +5,7 @@ import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.j
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
 import { payoutCashFlow, payoutCashFlowId, payoutDate, payoutGrossCents, payoutNetCents, payoutSharePercent, reconcilePayoutCashFlows } from './domain/payouts.js';
 import { normalizeTrade } from './domain/schema.js';
+import { markDeleted, touchSettings } from './domain/sync-merge.js';
 import { isoDate, netPnlCents, operationalBalanceCents, summarize, tradeR, uid } from './domain/trading.js';
 import { validateAccount, validateTrade } from './domain/validation.js';
 import { renderAccounts } from './pages/accounts.js';
@@ -64,6 +65,7 @@ function refreshSyncStatus(detail = '') {
   const label = $('#syncLabel'); const text = $('#syncDetail'); const dot = $('#syncDot'); if (!label) return;
   const connected = access.connected; label.textContent = syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando…' : syncStatus === 'pending' ? 'Salvo; enviando…' : syncStatus === 'conflict' ? 'Conflito de versões' : connected ? 'Automático ativo' : 'Modo local';
   text.textContent = detail || (connected ? 'Google Planilhas e Drive conectados automaticamente.' : 'Backup local ativo; configure o acesso automático uma única vez.');
+  if (syncStatus === 'merging') label.textContent = 'Combinando versões…';
   dot.className = `status-dot ${syncStatus}`;
 }
 function refreshAccountFilter() {
@@ -72,7 +74,7 @@ function refreshAccountFilter() {
   $('#accountFilter').value = selected; filters.account = selected;
 }
 function commit(mutator, action, collection) {
-  mutator(); db.audit.push({ id: uid(), action, collection, at: new Date().toISOString() }); db.audit = db.audit.slice(-500); db = localRepository.save(db); toast('Alterações salvas no backup local.'); render();
+  mutator(); const now = new Date().toISOString(); if (collection === 'settings') touchSettings(db, now); db.audit.push({ id: uid(), action, collection, at: now }); db.audit = db.audit.slice(-500); db = localRepository.save(db); toast('Alterações salvas no backup local.'); render();
   if (access.connected) sync.schedule(() => db, (next) => { db = next; if (page === 'settings') render(); });
 }
 function setPage(next) {
@@ -114,7 +116,8 @@ function tradeForm(id) {
     const tradeId = id || uid();
     const files = values.__screenshots || [];
     delete values.__screenshots; delete values.screenshots;
-    const trade = normalizeTrade({ ...current, ...values, id: tradeId, screenshots: [...(current.screenshots || [])], closedDate: values.closedDate, openedAt: current.openedAt || `${values.closedDate}T09:00:00Z`, closedAt: `${values.closedDate}T12:00:00Z`, timezone: account.timezone, entry: values.entry === '' ? null : Number(values.entry), stopLoss: values.stopLoss === '' ? null : Number(values.stopLoss), takeProfit: values.takeProfit === '' ? null : Number(values.takeProfit), exit: values.exit === '' ? null : Number(values.exit), lots: values.lots === '' ? null : Number(values.lots), partialExits: values.partialPnls.split(',').map((item) => item.trim()).filter(Boolean).map((item, index) => ({ id: `${tradeId}-${index}`, pnlCents: toCents(item) })), version: Number(current.version || 0) + 1 });
+    const now = new Date().toISOString();
+    const trade = normalizeTrade({ ...current, ...values, id: tradeId, screenshots: [...(current.screenshots || [])], closedDate: values.closedDate, openedAt: current.openedAt || `${values.closedDate}T09:00:00Z`, closedAt: `${values.closedDate}T12:00:00Z`, timezone: account.timezone, entry: values.entry === '' ? null : Number(values.entry), stopLoss: values.stopLoss === '' ? null : Number(values.stopLoss), takeProfit: values.takeProfit === '' ? null : Number(values.takeProfit), exit: values.exit === '' ? null : Number(values.exit), lots: values.lots === '' ? null : Number(values.lots), partialExits: values.partialPnls.split(',').map((item) => item.trim()).filter(Boolean).map((item, index) => ({ id: `${tradeId}-${index}`, pnlCents: toCents(item) })), createdAt: current.createdAt || now, updatedAt: now, version: Number(current.version || 0) + 1 });
     validateTrade(trade, db);
     if (files.length) trade.screenshots.push(...await workspace.uploadScreenshots(files, tradeId));
     validateTrade(trade, db); commit(() => { if (id) db.trades = db.trades.map((item) => item.id === id ? trade : item); else db.trades.push(trade); }, id ? 'update' : 'create', 'trades');
@@ -128,7 +131,7 @@ function presetForm(kind, previous = '') {
   });
 }
 function cashFlowForm(accountId) {
-  if (!db.accounts.length) return toast('Cadastre uma conta primeiro.'); modal('Registrar movimentação', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['deposit', 'Depósito'], ['withdrawal', 'Retirada do saldo operacional'], ['adjustment', 'Ajuste'], ['fee', 'Taxa'], ['payout', 'Ajuste de saldo por saque']], 'deposit') + field('amount', 'Valor com sinal (USD)', 'number', 0, 'required step="0.01"') + `<label class="check field full"><input name="affectsBalance" type="checkbox" checked> Impacta o saldo operacional</label>` + textArea('notes', 'Observações', '', 500), (values) => { const amountCents = toCents(values.amount); commit(() => db.cashFlows.push({ id: uid(), accountId: values.accountId, date: values.date, occurredAt: `${values.date}T12:00:00Z`, type: values.type, amountCents, affectsBalance: values.affectsBalance === 'on', notes: values.notes.trim(), version: 1 }), 'create', 'cashFlows'); });
+  if (!db.accounts.length) return toast('Cadastre uma conta primeiro.'); modal('Registrar movimentação', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['deposit', 'Depósito'], ['withdrawal', 'Retirada do saldo operacional'], ['adjustment', 'Ajuste'], ['fee', 'Taxa'], ['payout', 'Ajuste de saldo por saque']], 'deposit') + field('amount', 'Valor com sinal (USD)', 'number', 0, 'required step="0.01"') + `<label class="check field full"><input name="affectsBalance" type="checkbox" checked> Impacta o saldo operacional</label>` + textArea('notes', 'Observações', '', 500), (values) => { const amountCents = toCents(values.amount); const now = new Date().toISOString(); commit(() => db.cashFlows.push({ id: uid(), accountId: values.accountId, date: values.date, occurredAt: `${values.date}T12:00:00Z`, type: values.type, amountCents, affectsBalance: values.affectsBalance === 'on', notes: values.notes.trim(), createdAt: now, updatedAt: now, version: 1 }), 'create', 'cashFlows'); });
 }
 function updateAccountIncreasePreview() {
   const accountId = document.querySelector('[name="accountId"]')?.value; const amountInput = document.querySelector('[name="accountIncreaseAmount"]');
@@ -179,9 +182,9 @@ function payoutForm(accountId, payoutId) {
   updatePayoutPreview();
 }
 function feeForm(accountId) {
-  modal('Registrar taxa de prop firm', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['evaluation', 'Avaliação'], ['reset', 'Reset'], ['activation', 'Ativação'], ['platform', 'Plataforma'], ['other', 'Outra']], 'evaluation') + field('amount', 'Valor pago (USD)', 'number', 0, 'required min="0" step="0.01"') + textArea('notes', 'Observações', '', 500), (values) => commit(() => db.fees.push({ id: uid(), accountId: values.accountId, date: values.date, type: values.type, amountCents: toCents(values.amount), notes: values.notes.trim(), version: 1 }), 'create', 'fees'));
+  modal('Registrar taxa de prop firm', selectField('accountId', 'Conta', accountOptions(), accountId || accountOptions()[0][0]) + field('date', 'Data', 'date', isoDate(), 'required') + selectField('type', 'Tipo', [['evaluation', 'Avaliação'], ['reset', 'Reset'], ['activation', 'Ativação'], ['platform', 'Plataforma'], ['other', 'Outra']], 'evaluation') + field('amount', 'Valor pago (USD)', 'number', 0, 'required min="0" step="0.01"') + textArea('notes', 'Observações', '', 500), (values) => { const now = new Date().toISOString(); commit(() => db.fees.push({ id: uid(), accountId: values.accountId, date: values.date, type: values.type, amountCents: toCents(values.amount), notes: values.notes.trim(), createdAt: now, updatedAt: now, version: 1 }), 'create', 'fees'); });
 }
-function snapshotForm(accountId) { modal('Snapshot de balance e equity', field('capturedAt', 'Data e hora', 'datetime-local', new Date().toISOString().slice(0, 16), 'required') + field('balance', 'Balance (USD)', 'number', 0, 'required step="0.01"') + field('equity', 'Equity (USD)', 'number', 0, 'required step="0.01"'), (values) => commit(() => db.snapshots.push({ id: uid(), accountId, capturedAt: new Date(values.capturedAt).toISOString(), balanceCents: toCents(values.balance), equityCents: toCents(values.equity), version: 1 }), 'create', 'snapshots')); }
+function snapshotForm(accountId) { modal('Snapshot de balance e equity', field('capturedAt', 'Data e hora', 'datetime-local', new Date().toISOString().slice(0, 16), 'required') + field('balance', 'Balance (USD)', 'number', 0, 'required step="0.01"') + field('equity', 'Equity (USD)', 'number', 0, 'required step="0.01"'), (values) => { const now = new Date().toISOString(); commit(() => db.snapshots.push({ id: uid(), accountId, capturedAt: new Date(values.capturedAt).toISOString(), balanceCents: toCents(values.balance), equityCents: toCents(values.equity), createdAt: now, updatedAt: now, version: 1 }), 'create', 'snapshots'); }); }
 function dayDetail(date) { const trades = activeTrades().filter((trade) => trade.closedDate === date); const stats = summarize(trades); modal(`Operações de ${date}`, `<div class="field full"><strong>${money(stats.pnlCents)} • ${signed(stats.r, 'R')} • ${stats.count} operações</strong></div><div class="field full">${trades.map((trade) => `<div class="detail-item">${esc(trade.symbol)} • ${esc(accountName(trade.accountId))} • ${money(netPnlCents(trade))} • ${signed(tradeR(trade), 'R')}</div>`).join('') || 'Nenhuma operação.'}</div>`, () => {}, { submit: false }); }
 async function showScreenshots(tradeId) {
   const trade = db.trades.find((item) => item.id === tradeId);
@@ -203,7 +206,7 @@ async function deleteTrade(tradeId) {
   if (!confirm(message)) return;
   if (screenshots.length && !access.connected) throw new Error('Configure o acesso automático antes de excluir uma operação que possui prints.');
   for (const screenshot of screenshots) await workspace.deleteScreenshot(screenshot.id);
-  commit(() => { db.trades = db.trades.filter((item) => item.id !== tradeId); }, 'delete', 'trades');
+  commit(() => { markDeleted(db, 'trades', tradeId); db.trades = db.trades.filter((item) => item.id !== tradeId); }, 'delete', 'trades');
 }
 
 function exportCsv() { const columns = ['closedDate', 'accountId', 'symbol', 'side', 'entry', 'stopLoss', 'takeProfit', 'exit', 'lots', 'riskCents', 'plannedRewardCents', 'grossPnlCents', 'feesCents', 'swapCents', 'commissionCents', 'netPnlCents', 'strategy', 'notes']; const rows = [columns.join(','), ...db.trades.map((trade) => columns.map((key) => `"${String(trade[key] ?? '').replace(/"/g, '""')}"`).join(','))]; download('forex-trades.csv', `\ufeff${rows.join('\r\n')}`, 'text/csv;charset=utf-8'); }
@@ -225,7 +228,7 @@ $('#dialog').addEventListener('click', async (event) => {
   if (!confirm('Excluir este print do Google Drive?')) return;
   try {
     await workspace.deleteScreenshot(button.dataset.id);
-    commit(() => { const trade = db.trades.find((item) => item.id === button.dataset.tradeId); trade.screenshots = trade.screenshots.filter((item) => item.id !== button.dataset.id); }, 'delete-screenshot', 'trades');
+    commit(() => { const trade = db.trades.find((item) => item.id === button.dataset.tradeId); trade.screenshots = trade.screenshots.filter((item) => item.id !== button.dataset.id); trade.updatedAt = new Date().toISOString(); trade.version = Number(trade.version || 0) + 1; }, 'delete-screenshot', 'trades');
     $('#dialog').close();
   } catch (error) { $('#formError').textContent = error.message; }
 });
@@ -243,13 +246,13 @@ $('#app').addEventListener('click', async (event) => {
   const button = event.target.closest('button'); if (!button) return; if (button.dataset.goto) return setPage(button.dataset.goto); const action = button.dataset.action; const id = button.dataset.id; if (!action) return;
   try {
     if (action === 'new-account') accountForm(); else if (action === 'edit-account') accountForm(id); else if (action === 'toggle-archived') { showArchived = !showArchived; render(); }
-    else if (action === 'archive-account') commit(() => { const account = db.accounts.find((item) => item.id === id); account.archived = !account.archived; account.updatedAt = new Date().toISOString(); }, 'archive-toggle', 'accounts');
-    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'account-increase') accountIncreaseForm(id); else if (action === 'edit-account-increase') accountIncreaseForm('', id); else if (action === 'delete-account-increase' && confirm('Excluir este aumento e retirar o valor correspondente do saldo atual?')) commit(() => { db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete-account-increase', 'cashFlows'); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque e restaurar o valor bruto ao saldo atual?')) commit(() => { db.payouts = db.payouts.filter((item) => item.id !== id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== payoutCashFlowId(id) && !(flow.source === 'payout' && flow.sourceId === id)); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
+    else if (action === 'archive-account') commit(() => { const account = db.accounts.find((item) => item.id === id); account.archived = !account.archived; account.updatedAt = new Date().toISOString(); account.version = Number(account.version || 0) + 1; }, 'archive-toggle', 'accounts');
+    else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'account-increase') accountIncreaseForm(id); else if (action === 'edit-account-increase') accountIncreaseForm('', id); else if (action === 'delete-account-increase' && confirm('Excluir este aumento e retirar o valor correspondente do saldo atual?')) commit(() => { markDeleted(db, 'cashFlows', id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete-account-increase', 'cashFlows'); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque e restaurar o valor bruto ao saldo atual?')) commit(() => { const flowIds = db.cashFlows.filter((flow) => flow.id === payoutCashFlowId(id) || (flow.source === 'payout' && flow.sourceId === id)).map((flow) => flow.id); markDeleted(db, 'payouts', id); flowIds.forEach((flowId) => markDeleted(db, 'cashFlows', flowId)); db.payouts = db.payouts.filter((item) => item.id !== id); db.cashFlows = db.cashFlows.filter((flow) => !flowIds.includes(flow.id)); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
     else if (action === 'new-trade') tradeForm(); else if (action === 'edit-trade') tradeForm(id); else if (action === 'view-screenshots') await showScreenshots(id); else if (action === 'delete-trade') await deleteTrade(id);
     else if (action === 'add-preset') presetForm(button.dataset.kind);
     else if (action === 'edit-preset') presetForm(button.dataset.kind, button.dataset.value);
     else if (action === 'delete-preset' && confirm(`Excluir “${button.dataset.value}” das opções futuras? As operações antigas não serão alteradas.`)) commit(() => { db.settings = deletePreset(db, button.dataset.kind, button.dataset.value); }, 'delete-preset', 'settings');
-    else if (action === 'delete-cash-flow' && confirm('Excluir esta movimentação?')) commit(() => { db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete', 'cashFlows');
+    else if (action === 'delete-cash-flow' && confirm('Excluir esta movimentação?')) commit(() => { markDeleted(db, 'cashFlows', id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete', 'cashFlows');
     else if (action === 'clear-filters') { Object.assign(filters, { account: selected, from: '', to: '', firm: '', symbol: '', strategy: '', side: '' }); render(); }
     else if (action === 'calendar-mode') { calendarMode = button.dataset.mode; render(); } else if (action === 'prev-period') { if (calendarMode === 'year') year -= 1; else if (--month < 0) { month = 11; year -= 1; } render(); } else if (action === 'next-period') { if (calendarMode === 'year') year += 1; else if (++month > 11) { month = 0; year += 1; } render(); } else if (action === 'today') { year = new Date().getFullYear(); month = new Date().getMonth(); render(); } else if (action === 'open-month') { month = Number(button.dataset.month); calendarMode = 'month'; render(); } else if (action === 'day-detail') dayDetail(button.dataset.date);
     else if (action === 'export-json') download(`forex-journal-backup-${isoDate()}.json`, JSON.stringify(db, null, 2)); else if (action === 'import-json') $('#importFile').click(); else if (action === 'export-csv') exportCsv();
