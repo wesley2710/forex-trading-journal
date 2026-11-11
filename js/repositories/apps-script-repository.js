@@ -52,6 +52,15 @@ export class AppsScriptRepository {
     });
   }
 
+  async applyChanges(mutations, expectedRevision, fallbackSnapshot) {
+    try {
+      return await this.request('applyChanges', { expectedRevision: Number(expectedRevision || 0), mutations });
+    } catch (error) {
+      if (error.code !== 'INVALID_ACTION' || !fallbackSnapshot) throw error;
+      return { ...await this.save(fallbackSnapshot), fallbackFullSync: true };
+    }
+  }
+
   async uploadScreenshots(files, tradeId) {
     const output = [];
     for (const file of files) {

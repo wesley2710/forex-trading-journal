@@ -11,7 +11,7 @@ const FOREX_TABS = {
 const FOREX_COLLECTIONS = Object.keys(FOREX_TABS);
 
 function doGet() {
-  return forexJson_({ ok: true, service: 'Forex Trading Journal Sync', version: 1 });
+  return forexJson_({ ok: true, service: 'Forex Trading Journal Sync', version: 2, syncMode: 'incremental' });
 }
 
 function doPost(event) {
@@ -22,6 +22,7 @@ function doPost(event) {
     let data;
     if (action === 'load') data = forexLoad_();
     else if (action === 'save') data = forexSave_(request.snapshot, request.expectedRevision);
+    else if (action === 'applyChanges') data = forexApplyChanges_(request.mutations, request.expectedRevision);
     else if (action === 'uploadScreenshot') data = forexUploadScreenshot_(request.tradeId, request.file);
     else if (action === 'loadScreenshot') data = forexLoadScreenshot_(request.fileId);
     else if (action === 'deleteScreenshot') data = forexDeleteScreenshot_(request.fileId);
@@ -167,6 +168,75 @@ function forexSave_(snapshot, expectedRevision) {
     ]);
     SpreadsheetApp.flush();
     return { revision: nextRevision, updatedAt: now };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function forexValidateMutations_(mutations) {
+  if (!Array.isArray(mutations) || mutations.length > 5000) throw forexError_('INVALID_DATA', 'Fila de alterações inválida.');
+  const allowed = FOREX_COLLECTIONS.concat(['settings']);
+  mutations.forEach(function(mutation) {
+    if (!mutation || allowed.indexOf(String(mutation.collection || '')) < 0) throw forexError_('INVALID_DATA', 'Coleção incremental inválida.');
+    if (['upsert', 'delete'].indexOf(String(mutation.type || '')) < 0) throw forexError_('INVALID_DATA', 'Operação incremental inválida.');
+    if (!String(mutation.recordId || '')) throw forexError_('INVALID_DATA', 'Registro incremental sem ID.');
+    if (mutation.collection === 'settings' && mutation.type === 'delete') throw forexError_('INVALID_DATA', 'Configurações não podem ser excluídas.');
+    if (mutation.type === 'upsert' && (!mutation.record || typeof mutation.record !== 'object' || Array.isArray(mutation.record))) throw forexError_('INVALID_DATA', 'Conteúdo incremental inválido.');
+    if (mutation.type === 'upsert' && mutation.collection !== 'settings' && String(mutation.record.id || '') !== String(mutation.recordId)) throw forexError_('INVALID_DATA', 'ID incremental divergente.');
+  });
+  if (JSON.stringify(mutations).length > 8 * 1024 * 1024) throw forexError_('PAYLOAD_TOO_LARGE', 'As alterações excedem 8 MB.');
+}
+
+function forexApplySheetMutations_(sheet, mutations, collection, nextRevision, now) {
+  const lastRow = sheet.getLastRow();
+  const ids = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues() : [];
+  const rowById = {};
+  ids.forEach(function(row, index) { if (row[0]) rowById[String(row[0])] = index + 2; });
+  const newRows = [];
+  mutations.filter(function(mutation) { return mutation.type === 'upsert'; }).forEach(function(mutation) {
+    const id = String(mutation.recordId);
+    const record = collection === 'settings'
+      ? Object.assign({}, mutation.record, { id: 'settings', version: nextRevision, updatedAt: now })
+      : mutation.record;
+    const row = forexRow_(record);
+    if (rowById[id]) sheet.getRange(rowById[id], 1, 1, FOREX_HEADERS.length).setValues([row]);
+    else newRows.push(row);
+  });
+  if (newRows.length) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, FOREX_HEADERS.length).setValues(newRows);
+  const deleteRows = mutations.filter(function(mutation) { return mutation.type === 'delete' && rowById[String(mutation.recordId)]; })
+    .map(function(mutation) { return rowById[String(mutation.recordId)]; }).sort(function(a, b) { return b - a; });
+  deleteRows.forEach(function(row) { sheet.deleteRow(row); });
+}
+
+function forexApplyChanges_(mutations, expectedRevision) {
+  forexValidateMutations_(mutations);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const spreadsheet = forexEnsureSchema_();
+    const meta = forexMeta_();
+    const currentRevision = Number(meta.revision || 0);
+    if (Number(expectedRevision || 0) !== currentRevision) throw forexError_('conflict', 'A planilha mudou desde a última sincronização.', { revision: currentRevision });
+    if (!mutations.length) return { revision: currentRevision, updatedAt: meta.updatedAt || null, applied: 0 };
+    const nextRevision = currentRevision + 1;
+    const now = new Date().toISOString();
+    const groups = {};
+    mutations.forEach(function(mutation) {
+      const collection = String(mutation.collection);
+      if (!groups[collection]) groups[collection] = [];
+      groups[collection].push(mutation);
+    });
+    Object.keys(groups).forEach(function(collection) {
+      const sheet = collection === 'settings' ? spreadsheet.getSheetByName('Settings') : spreadsheet.getSheetByName(FOREX_TABS[collection]);
+      forexApplySheetMutations_(sheet, groups[collection], collection, nextRevision, now);
+    });
+    const counts = {};
+    FOREX_COLLECTIONS.forEach(function(collection) { counts[collection] = Math.max(0, spreadsheet.getSheetByName(FOREX_TABS[collection]).getLastRow() - 1); });
+    spreadsheet.getSheetByName('_meta').getRange(1, 1, 4, 2).setValues([
+      ['schemaVersion', String(FOREX_SCHEMA_VERSION)], ['revision', String(nextRevision)], ['counts', JSON.stringify(counts)], ['updatedAt', now]
+    ]);
+    SpreadsheetApp.flush();
+    return { revision: nextRevision, updatedAt: now, applied: mutations.length };
   } finally {
     lock.releaseLock();
   }

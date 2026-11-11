@@ -14,7 +14,7 @@ Aplicação web pessoal e responsiva para registrar operações de Forex, acompa
 - Saques com divisão editável entre trader e mesa, valores bruto e líquido, taxas, movimentações e snapshots de balance/equity.
 - Cada saque reduz automaticamente o saldo pelo valor bruto, sem alterar R, win rate, profit factor ou drawdown operacional.
 - Calendários, drill-down diário, filtros, JSON, CSV e auditoria.
-- Cache local/offline e sincronização automática cerca de 900 ms após cada alteração.
+- Cache local/offline e sincronização incremental automática cerca de 900 ms após cada alteração: somente registros incluídos, alterados ou excluídos são enviados, em lotes pequenos.
 - Planilha estruturada e pasta privada de prints na conta Google do proprietário.
 - Segredo pessoal configurado uma vez por navegador; não há login repetido em cada acesso.
 - GitHub Pages, testes e deploy automatizado.

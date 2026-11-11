@@ -27,6 +27,7 @@ export function validateTrade(trade, db) {
 }
 export function validateDatabase(db) {
   if (!db || typeof db !== 'object') throw new Error('Backup inválido.');
+  if (db.pendingMutations !== undefined && !Array.isArray(db.pendingMutations)) throw new Error('Fila de sincronização inválida.');
   for (const collection of COLLECTIONS) if (!Array.isArray(db[collection])) throw new Error(`Coleção ${collection} inválida.`);
   const ids = new Set();
   for (const account of db.accounts) { if (!account.id || ids.has(account.id)) throw new Error('Conta sem ID ou duplicada.'); ids.add(account.id); validateAccount(account); }

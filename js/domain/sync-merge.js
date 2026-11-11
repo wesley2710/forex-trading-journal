@@ -38,7 +38,13 @@ function mergeCollection(local = [], remote = [], collection, tombstones) {
 function mergeSettings(local = {}, remote = {}, tombstones) {
   const localTime = String(local[SETTINGS_UPDATED_KEY] || ''); const remoteTime = String(remote[SETTINGS_UPDATED_KEY] || '');
   const primary = localTime >= remoteTime ? local : remote; const secondary = primary === local ? remote : local;
-  return { ...secondary, ...primary, [TOMBSTONES_KEY]: tombstones, [SETTINGS_UPDATED_KEY]: localTime >= remoteTime ? localTime : remoteTime };
+  const merged = { ...secondary, ...primary };
+  if (tombstones.length || TOMBSTONES_KEY in local || TOMBSTONES_KEY in remote) merged[TOMBSTONES_KEY] = tombstones;
+  else delete merged[TOMBSTONES_KEY];
+  const updatedAt = localTime >= remoteTime ? localTime : remoteTime;
+  if (updatedAt || SETTINGS_UPDATED_KEY in local || SETTINGS_UPDATED_KEY in remote) merged[SETTINGS_UPDATED_KEY] = updatedAt;
+  else delete merged[SETTINGS_UPDATED_KEY];
+  return merged;
 }
 
 export function mergeDatabases(local, remote) {

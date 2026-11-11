@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyDatabase } from '../js/domain/schema.js';
 import { markDeleted, mergeDatabases } from '../js/domain/sync-merge.js';
+import { diffDatabases } from '../js/domain/sync-diff.js';
 import { SyncService } from '../js/services/sync-service.js';
 
 const account = (id, updatedAt, name = id) => ({ id, name, firm: '', status: 'Ativa', archived: false, initialBalanceCents: 10000000, profitTargetCents: 0, dailyLossLimitCents: 0, maxLossLimitCents: 0, drawdownType: 'static', lossBasis: 'balance', timezone: 'UTC', rolloverTime: '00:00', profitSplit: 80, createdAt: updatedAt, updatedAt, version: 1 });
@@ -39,19 +40,27 @@ test('registro de exclusão não sobrescreve cadastros mais novos da nuvem', () 
 
 test('serviço resolve conflito remoto combinando e reenviando os dados', async () => {
   const localDb = database({ revision: 2, remoteRevision: 1, syncedRevision: 1, accounts: [account('local', '2026-10-25T10:00:00Z')] });
+  localDb.pendingMutations = diffDatabases(database(), localDb);
   const remoteDb = database({ revision: 4, accounts: [account('remote', '2026-10-25T10:01:00Z')] });
-  let saves = 0; let uploaded;
+  let saves = 0; let uploaded; let fallbackSnapshot;
   const remote = {
-    async save(snapshot) { saves += 1; if (saves === 1) throw Object.assign(new Error('conflito'), { code: 'conflict' }); uploaded = snapshot; return { revision: 6 }; },
+    async applyChanges(mutations, expectedRevision, snapshot) {
+      saves += 1;
+      if (saves === 1) throw Object.assign(new Error('conflito'), { code: 'conflict' });
+      uploaded = mutations; fallbackSnapshot = snapshot;
+      assert.equal(expectedRevision, 5);
+      return { revision: 6 };
+    },
     async load() { return { data: remoteDb, revision: 5 }; },
   };
   const local = { replace(value) { return value; } };
   const result = await new SyncService(local, remote).push(localDb);
   assert.equal(saves, 2);
-  assert.deepEqual(uploaded.accounts.map((item) => item.id).sort(), ['local', 'remote']);
-  assert.equal(uploaded.remoteRevision, 5);
+  assert.deepEqual(uploaded.map((item) => `${item.collection}:${item.recordId}`), ['accounts:local']);
+  assert.deepEqual(fallbackSnapshot.accounts.map((item) => item.id).sort(), ['local', 'remote']);
+  assert.equal(fallbackSnapshot.remoteRevision, 5);
   assert.equal(result.remoteRevision, 6);
-  assert.equal(result.syncedRevision, uploaded.revision);
+  assert.equal(result.syncedRevision, fallbackSnapshot.revision);
 });
 
 test('bootstrap combina alterações pendentes com uma revisão remota nova', async () => {

@@ -58,6 +58,8 @@ A URL do Web App pode ficar no repositório; o segredo não pode.
 
 Depois de alterar `Code.gs`, abra **Implantar > Gerenciar implantações > Editar**, selecione **Nova versão** e publique mantendo a mesma URL. Alterações apenas no frontend são publicadas normalmente pelo GitHub Pages.
 
+O backend incremental responde no endereço `/exec` com `version: 2` e `syncMode: "incremental"`. Enquanto uma implantação antiga ainda estiver ativa, o frontend usa temporariamente o salvamento completo por compatibilidade; a atualização da implantação ativa o envio exclusivo das linhas modificadas.
+
 ## 7. Checklist ponta a ponta
 
 - Abrir o Web App diretamente e confirmar a resposta de status sem dados.

@@ -8,13 +8,14 @@
 - Dashboard, calendários, filtros, backup JSON, CSV e auditoria.
 - Backend gratuito em Google Apps Script vinculado à planilha.
 - Segredo persistente por navegador, validado em todas as ações do backend.
-- Sincronização automática com debounce, cache offline, revisão otimista e aviso de conflito.
+- Sincronização incremental automática com debounce, fila offline, lotes de até 250 mutações, revisão otimista e combinação por registro em conflitos.
+- Inclusões, edições e exclusões alteram apenas as linhas afetadas da planilha; dados já confirmados não são regravados.
 - Upload, visualização e exclusão de múltiplos prints, limitados à pasta privada do diário e a 8 MB por imagem.
 - GitHub Pages e CI sem Firebase, Cloud Run, conta de serviço ou faturamento.
 
 ## Verificação automatizada
 
-- Testes de domínio, migração, validação e codificação binária de prints.
+- Testes de domínio, migração, validação, diferenças incrementais, fila concorrente, lotes e codificação binária de prints.
 - Validação sintática do frontend e do `Code.gs`.
 - Detector básico de segredos no repositório.
 - Smoke HTTP para os principais arquivos do frontend.

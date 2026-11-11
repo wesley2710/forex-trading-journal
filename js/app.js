@@ -8,6 +8,7 @@ import { deletePreset, presetOptions, presetValues, savePreset } from './domain/
 import { payoutCashFlow, payoutCashFlowId, payoutDate, payoutGrossCents, payoutNetCents, payoutSharePercent, reconcilePayoutCashFlows } from './domain/payouts.js';
 import { normalizeTrade } from './domain/schema.js';
 import { markDeleted, touchSettings } from './domain/sync-merge.js';
+import { diffDatabases, mergeMutationQueues } from './domain/sync-diff.js';
 import { isoDate, netPnlCents, operationalBalanceCents, summarize, tradeR, uid } from './domain/trading.js';
 import { validateAccount, validateTrade } from './domain/validation.js';
 import { renderAccounts } from './pages/accounts.js';
@@ -23,9 +24,11 @@ import { SyncService } from './services/sync-service.js';
 import { esc, field, opts, selectField, textArea } from './ui/html.js';
 
 const $ = (selector) => document.querySelector(selector);
+const cloneDatabase = (value) => globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const localRepository = new LocalRepository();
 let db = localRepository.load();
-if (reconcilePayoutCashFlows(db)) db = localRepository.save(db);
+const initialDb = cloneDatabase(db);
+if (reconcilePayoutCashFlows(db)) { db.pendingMutations = mergeMutationQueues(initialDb.pendingMutations, diffDatabases(initialDb, db)); db = localRepository.save(db); }
 let page = 'dashboard';
 let selected = 'all';
 let showArchived = false;
@@ -50,7 +53,9 @@ if (access.configured) {
 }
 
 function persistPayoutBalanceLinks() {
+  const before = cloneDatabase(db);
   if (!reconcilePayoutCashFlows(db)) return;
+  db.pendingMutations = mergeMutationQueues(before.pendingMutations, diffDatabases(before, db));
   db = localRepository.save(db);
   if (access.connected && sync) sync.schedule(() => db, (next) => { db = next; if (page === 'settings') render(); });
 }
@@ -76,7 +81,7 @@ function refreshAccountFilter() {
   $('#accountFilter').value = selected; filters.account = selected;
 }
 function commit(mutator, action, collection) {
-  mutator(); const now = new Date().toISOString(); if (collection === 'settings') touchSettings(db, now); db.audit.push({ id: uid(), action, collection, at: now }); db.audit = db.audit.slice(-500); db = localRepository.save(db); toast('Alterações salvas no backup local.'); render();
+  const before = cloneDatabase(db); mutator(); const now = new Date().toISOString(); if (collection === 'settings') touchSettings(db, now); db.audit.push({ id: uid(), action, collection, at: now }); db.audit = db.audit.slice(-500); db.pendingMutations = mergeMutationQueues(before.pendingMutations, diffDatabases(before, db)); db = localRepository.save(db); toast('Alterações salvas no backup local.'); render();
   if (access.connected) sync.schedule(() => db, (next) => { db = next; if (page === 'settings') render(); });
 }
 function setPage(next) {

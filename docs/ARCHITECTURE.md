@@ -13,9 +13,9 @@ Não existe servidor pago. O Web App é autorizado uma vez durante a implantaç�
 
 ## Salvamento e inicialização
 
-Cada alteração é gravada imediatamente no cache local. Após 900 ms sem novas mudanças, o frontend envia um snapshot autenticado ao Apps Script. Mudanças feitas durante um envio entram no lote seguinte. Falhas deixam a cópia local intacta e o site tenta novamente quando houver uma nova alteração ou quando o usuário solicitar.
+Cada alteração é gravada imediatamente no cache local. Após 900 ms sem novas mudanças, o frontend envia ao Apps Script somente as inclusões, edições e exclusões pendentes, em lotes de até 250 mutações. Linhas e abas não afetadas não são regravadas. Mudanças feitas durante um envio permanecem na fila do lote seguinte. Falhas deixam a cópia local intacta e o site tenta novamente quando houver uma nova alteração ou quando o usuário solicitar.
 
-Ao abrir o site, a sessão é restaurada pelo segredo salvo no navegador. O aplicativo compara a revisão local com `_meta`: baixa a versão mais nova quando não há mudanças locais, envia mudanças pendentes quando a revisão remota ainda coincide e bloqueia sobrescritas silenciosas quando detecta conflito.
+Ao abrir o site, a sessão é restaurada pelo segredo salvo no navegador. O aplicativo compara a revisão local com `_meta`: baixa a versão mais nova quando não há mudanças locais e envia a fila pendente quando a revisão remota ainda coincide. Se a nuvem também mudou, combina as bases por registro, calcula um novo conjunto mínimo de mutações e tenta novamente. O endpoint legado de snapshot completo permanece apenas como recuperação e compatibilidade durante atualizações do Apps Script.
 
 ## Estrutura da planilha
 
@@ -35,7 +35,7 @@ Os prints são arquivos privados na pasta `Forex Trading Journal - Prints`. As o
 ## Limites conhecidos
 
 - A arquitetura é para uma pessoa e baixo volume; não oferece colaboração multiusuário.
-- Um conflito entre dois dispositivos exige escolher explicitamente a versão remota ou preservar/exportar a local.
+- Em alterações simultâneas do mesmo registro em dois dispositivos, prevalece a edição com timestamp/versão mais recente; registros diferentes são combinados.
 - Sem internet, registros textuais continuam no cache; novos prints exigem conexão para serem enviados ao Drive.
 - Não há preços ao vivo nem integração MT5; equity depende de snapshots manuais.
 - O espaço dos prints conta na cota normal do Google Drive.
