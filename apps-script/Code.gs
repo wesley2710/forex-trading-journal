@@ -20,7 +20,8 @@ function doPost(event) {
     forexAuthorize_(request.token);
     const action = String(request.action || '');
     let data;
-    if (action === 'load') data = forexLoad_();
+    if (action === 'status') data = forexStatus_();
+    else if (action === 'load') data = forexLoad_();
     else if (action === 'save') data = forexSave_(request.snapshot, request.expectedRevision);
     else if (action === 'applyChanges') data = forexApplyChanges_(request.mutations, request.expectedRevision);
     else if (action === 'uploadScreenshot') data = forexUploadScreenshot_(request.tradeId, request.file);
@@ -121,6 +122,11 @@ function forexLoad_() {
     });
   }
   return { data: data, revision: revision, updatedAt: meta.updatedAt || null };
+}
+
+function forexStatus_() {
+  const meta = forexMeta_();
+  return { revision: Number(meta.revision || 0), updatedAt: meta.updatedAt || null };
 }
 
 function forexValidateSnapshot_(snapshot) {

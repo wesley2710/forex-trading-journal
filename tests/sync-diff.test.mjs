@@ -68,3 +68,30 @@ test('histórico pendente é enviado em lotes sem reenviar registros confirmados
   assert.equal(result.pendingMutations.length, 3);
   assert.deepEqual(result.pendingMutations.map((item) => item.id), ['m-250', 'm-251', 'm-252']);
 });
+
+test('abertura consulta somente a revisão quando a nuvem não mudou', async () => {
+  const db = { ...emptyDatabase(), revision: 7, remoteRevision: 5, syncedRevision: 7 };
+  let loads = 0;
+  const remote = {
+    async status() { return { revision: 5 }; },
+    async load() { loads += 1; throw new Error('não deveria baixar a base'); },
+  };
+  const result = await new SyncService({ replace: (value) => value }, remote).bootstrap(db);
+  assert.equal(loads, 0);
+  assert.equal(result, db);
+});
+
+test('fila existente é enviada sem baixar novamente todos os registros', async () => {
+  const base = emptyDatabase();
+  const db = { ...base, revision: 2, remoteRevision: 5, syncedRevision: 1, accounts: [account('a', 'A', '2026-11-11T10:00:00Z')] };
+  db.pendingMutations = diffDatabases(base, db);
+  let loads = 0;
+  const remote = {
+    async status() { return { revision: 5 }; },
+    async load() { loads += 1; throw new Error('não deveria baixar a base'); },
+    async applyChanges(mutations) { assert.equal(mutations.length, 1); return { revision: 6 }; },
+  };
+  const result = await new SyncService({ replace: (value) => value }, remote).bootstrap(db);
+  assert.equal(loads, 0);
+  assert.equal(result.pendingMutations.length, 0);
+});

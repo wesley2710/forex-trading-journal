@@ -45,6 +45,16 @@ export class AppsScriptRepository {
 
   load() { return this.request('load'); }
 
+  async status() {
+    try {
+      return await this.request('status');
+    } catch (error) {
+      if (error.code !== 'INVALID_ACTION') throw error;
+      const loaded = await this.load();
+      return { revision: loaded.revision, updatedAt: loaded.updatedAt, legacyLoad: loaded };
+    }
+  }
+
   save(snapshot) {
     return this.request('save', {
       expectedRevision: Number(snapshot.remoteRevision || 0),

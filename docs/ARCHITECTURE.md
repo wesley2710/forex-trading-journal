@@ -15,7 +15,7 @@ Não existe servidor pago. O Web App é autorizado uma vez durante a implantaç�
 
 Cada alteração é gravada imediatamente no cache local. Após 900 ms sem novas mudanças, o frontend envia ao Apps Script somente as inclusões, edições e exclusões pendentes, em lotes de até 250 mutações. Linhas e abas não afetadas não são regravadas. Mudanças feitas durante um envio permanecem na fila do lote seguinte. Falhas deixam a cópia local intacta e o site tenta novamente quando houver uma nova alteração ou quando o usuário solicitar.
 
-Ao abrir o site, a sessão é restaurada pelo segredo salvo no navegador. O aplicativo compara a revisão local com `_meta`: baixa a versão mais nova quando não há mudanças locais e envia a fila pendente quando a revisão remota ainda coincide. Se a nuvem também mudou, combina as bases por registro, calcula um novo conjunto mínimo de mutações e tenta novamente. O endpoint legado de snapshot completo permanece apenas como recuperação e compatibilidade durante atualizações do Apps Script.
+Ao abrir o site, a sessão é restaurada pelo segredo salvo no navegador. O aplicativo consulta primeiro somente a revisão de `_meta`, sem baixar o histórico. Baixa a base completa apenas quando a nuvem realmente mudou, em uma restauração manual ou para resolver um conflito; se a revisão coincide, envia diretamente a fila pendente. Quando os dois lados mudaram, combina as bases por registro, calcula um novo conjunto mínimo de mutações e tenta novamente. O endpoint legado de snapshot completo permanece apenas como recuperação e compatibilidade durante atualizações do Apps Script.
 
 ## Estrutura da planilha
 

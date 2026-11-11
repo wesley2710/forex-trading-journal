@@ -35,3 +35,12 @@ test('backend antigo recebe snapshot completo como compatibilidade temporária',
   assert.equal(result.revision, 4);
   assert.equal(result.fallbackFullSync, true);
 });
+
+test('consulta de status evita baixar a base completa', async () => {
+  const repository = new AppsScriptRepository({ endpoint: 'https://example.invalid', getToken: () => 'token' });
+  repository.request = async (action) => {
+    assert.equal(action, 'status');
+    return { revision: 12, updatedAt: '2026-11-11T12:00:00Z' };
+  };
+  assert.equal((await repository.status()).revision, 12);
+});

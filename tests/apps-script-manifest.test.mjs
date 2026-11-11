@@ -15,6 +15,7 @@ test('manifesto ativa a API avançada do Drive com escopo limitado', () => {
 
 test('backend incremental altera linhas pontuais sem limpar as abas', () => {
   assert.match(source, /action === 'applyChanges'/);
+  assert.match(source, /action === 'status'/);
   assert.match(source, /version: 2, syncMode: 'incremental'/);
   const start = source.indexOf('function forexApplySheetMutations_');
   const end = source.indexOf('function forexApplyChanges_', start);

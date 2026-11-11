@@ -73,21 +73,34 @@ export class SyncService extends EventTarget {
 
   async bootstrap(localDb) {
     this.update('syncing', 'Conferindo a nuvem');
-    const remote = await this.remote.load();
+    const status = this.remote.status ? await this.remote.status() : await this.remote.load();
+    const remoteRevision = Number(status.revision || 0);
+    const loadRemote = async () => status.legacyLoad || (status.data ? status : this.remote.load());
     const pending = (localDb.pendingMutations || []).length > 0 || Number(localDb.revision || 0) > Number(localDb.syncedRevision || 0);
     if (pending) {
-      if (Number(remote.revision || 0) !== Number(localDb.remoteRevision || 0)) {
+      if (remoteRevision !== Number(localDb.remoteRevision || 0)) {
         this.update('merging', 'Combinando alterações locais e da nuvem');
+        const remote = await loadRemote();
         const merged = { ...mergeDatabases(localDb, remote.data), revision: Math.max(Number(localDb.revision || 0), Number(remote.data.revision || 0)) + 1, remoteRevision: remote.revision };
         merged.pendingMutations = diffDatabases(remote.data, merged);
         const result = await this.push(merged); delete result.acknowledgedMutationIds; return this.local.replace(result);
       }
-      const candidate = { ...localDb, pendingMutations: mergeMutationQueues(localDb.pendingMutations, diffDatabases(remote.data, localDb)) };
+      let pendingMutations = localDb.pendingMutations || [];
+      if (!pendingMutations.length) {
+        const remote = await loadRemote();
+        pendingMutations = diffDatabases(remote.data, localDb);
+      }
+      const candidate = { ...localDb, pendingMutations: mergeMutationQueues(localDb.pendingMutations, pendingMutations) };
       const result = await this.push(candidate); delete result.acknowledgedMutationIds; return this.local.replace(result);
     }
-    if (Number(remote.revision || 0) > Number(localDb.remoteRevision || 0)) return this.pull();
-    if (Number(remote.revision || 0) === 0 && (localDb.accounts.length || localDb.trades.length || localDb.audit.length)) {
-      const candidate = { ...localDb, pendingMutations: diffDatabases(remote.data, localDb) };
+    if (remoteRevision > Number(localDb.remoteRevision || 0)) {
+      if (!status.legacyLoad) return this.pull();
+      const remote = status.legacyLoad;
+      const result = this.local.replace({ ...remote.data, pendingMutations: [], remoteRevision: remote.revision, syncedRevision: Number(remote.data.revision || 0) });
+      this.lastSync = new Date().toISOString(); this.update('synced'); return result;
+    }
+    if (remoteRevision === 0 && (localDb.accounts.length || localDb.trades.length || localDb.audit.length)) {
+      const candidate = { ...localDb, pendingMutations: diffDatabases({}, localDb) };
       const result = await this.push(candidate); delete result.acknowledgedMutationIds; return this.local.replace(result);
     }
     this.lastSync = new Date().toISOString(); this.update('synced'); return localDb;
