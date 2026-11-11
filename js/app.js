@@ -1,6 +1,7 @@
 import { appConfig } from './config.js';
 import { barChart, lineChart } from './charts.js';
 import { accountDeletionSummary, deleteAccountRecords } from './domain/account-deletion.js';
+import { visibleAccountRecords } from './domain/account-visibility.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
 import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
@@ -33,7 +34,7 @@ let month = new Date().getMonth();
 let calendarMode = 'month';
 let formHandler = null;
 let galleryUrls = [];
-const filters = { account: 'all', from: '', to: '', firm: '', symbol: '', strategy: '', side: '' };
+const filters = { account: 'all', historyAccount: 'all', includeArchived: false, from: '', to: '', firm: '', symbol: '', strategy: '', side: '' };
 const performanceFilter = { mode: 'all', from: '', to: '' };
 const performancePeriod = () => ({ ...analyticsPeriodRange(performanceFilter.mode, performanceFilter), customFrom: performanceFilter.from, customTo: performanceFilter.to });
 
@@ -59,7 +60,7 @@ const pageMeta = {
 };
 const accountName = (id) => db.accounts.find((account) => account.id === id)?.name || 'Conta removida';
 const accountOptions = () => db.accounts.filter((account) => !account.archived).map((account) => [account.id, account.name]);
-const activeTrades = () => db.trades.filter((trade) => selected === 'all' || trade.accountId === selected);
+const activeTrades = () => visibleAccountRecords(db, db.trades, { selected });
 
 function toast(message) { const element = $('#toast'); element.textContent = message; element.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => element.classList.remove('show'), 3300); }
 function refreshSyncStatus(detail = '') {
@@ -71,7 +72,7 @@ function refreshSyncStatus(detail = '') {
 }
 function refreshAccountFilter() {
   if (!db.accounts.some((account) => account.id === selected && !account.archived)) selected = 'all';
-  $('#accountFilter').innerHTML = opts([['all', 'Todas as contas'], ...accountOptions()], selected);
+  $('#accountFilter').innerHTML = opts([['all', 'Todas as contas ativas'], ...accountOptions()], selected);
   $('#accountFilter').value = selected; filters.account = selected;
 }
 function commit(mutator, action, collection) {
@@ -248,11 +249,12 @@ $('#dialog').addEventListener('click', async (event) => {
 });
 $('#closeDialog').onclick = $('#cancelDialog').onclick = () => $('#dialog').close();
 $('#nav').addEventListener('click', (event) => { const button = event.target.closest('[data-page]'); if (button) setPage(button.dataset.page); });
-$('#accountFilter').onchange = (event) => { selected = event.target.value; filters.account = selected; render(); };
+$('#accountFilter').onchange = (event) => { selected = event.target.value; filters.account = selected; filters.historyAccount = selected; render(); };
 $('#quickAdd').onclick = () => tradeForm();
 $('#menuButton').onclick = () => { const open = $('.sidebar').classList.toggle('open'); $('#menuButton').setAttribute('aria-expanded', String(open)); };
 $('#app').addEventListener('change', (event) => {
-  if (event.target.dataset.filter) { filters[event.target.dataset.filter] = event.target.value; render(); }
+  if (event.target.dataset.includeArchived !== undefined) { filters.includeArchived = event.target.checked; render(); }
+  else if (event.target.dataset.filter) { filters[event.target.dataset.filter] = event.target.value; render(); }
   else if (event.target.dataset.performancePeriod !== undefined) { performanceFilter.mode = event.target.value; render(); }
   else if (event.target.dataset.performanceDate) { performanceFilter[event.target.dataset.performanceDate] = event.target.value; render(); }
 });
@@ -268,7 +270,7 @@ $('#app').addEventListener('click', async (event) => {
     else if (action === 'edit-preset') presetForm(button.dataset.kind, button.dataset.value);
     else if (action === 'delete-preset' && confirm(`Excluir “${button.dataset.value}” das opções futuras? As operações antigas não serão alteradas.`)) commit(() => { db.settings = deletePreset(db, button.dataset.kind, button.dataset.value); }, 'delete-preset', 'settings');
     else if (action === 'delete-cash-flow' && confirm('Excluir esta movimentação?')) commit(() => { markDeleted(db, 'cashFlows', id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete', 'cashFlows');
-    else if (action === 'clear-filters') { Object.assign(filters, { account: selected, from: '', to: '', firm: '', symbol: '', strategy: '', side: '' }); render(); }
+    else if (action === 'clear-filters') { Object.assign(filters, { account: selected, historyAccount: selected, includeArchived: false, from: '', to: '', firm: '', symbol: '', strategy: '', side: '' }); render(); }
     else if (action === 'calendar-mode') { calendarMode = button.dataset.mode; render(); } else if (action === 'prev-period') { if (calendarMode === 'year') year -= 1; else if (--month < 0) { month = 11; year -= 1; } render(); } else if (action === 'next-period') { if (calendarMode === 'year') year += 1; else if (++month > 11) { month = 0; year += 1; } render(); } else if (action === 'today') { year = new Date().getFullYear(); month = new Date().getMonth(); render(); } else if (action === 'open-month') { month = Number(button.dataset.month); calendarMode = 'month'; render(); } else if (action === 'day-detail') dayDetail(button.dataset.date);
     else if (action === 'export-json') download(`forex-journal-backup-${isoDate()}.json`, JSON.stringify(db, null, 2)); else if (action === 'import-json') $('#importFile').click(); else if (action === 'export-csv') exportCsv();
     else if (action === 'configure-access') accessForm();

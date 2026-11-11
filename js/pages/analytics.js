@@ -2,6 +2,7 @@ import { accountPerformance, costStats, dateInPeriod, drawdownStats, groupPerfor
 import { isCompletedPayout, payoutDate, payoutFirmCents, payoutGrossCents, payoutNetCents, payoutSharePercent, payoutSummary } from '../domain/payouts.js';
 import { netPnlCents, summarize, tradeR } from '../domain/trading.js';
 import { fromCents, money, round, signed } from '../domain/money.js';
+import { visibleAccountIds } from '../domain/account-visibility.js';
 import { empty, esc, helpLabel, helpMetric, periodSelector } from '../ui/html.js';
 
 const pf = (value) => value === Infinity ? '∞' : Number(value || 0).toFixed(2);
@@ -27,7 +28,8 @@ export function renderAnalytics({ db, trades, accounts, selected = 'all', period
   const startingCapital = accounts.reduce((sum, account) => sum + Number(account.initialBalanceCents || 0), 0);
   const drawdown = drawdownStats(items, startingCapital); const months = monthlyPerformance(items); const weekdays = weekdayPerformance(items);
   const costs = costStats(items); const accountRows = accountPerformance(accounts, items, db.cashFlows); const comparison = recentComparison(items, 20);
-  const withdrawals = (db.payouts || []).filter((item) => isCompletedPayout(item) && (selected === 'all' || item.accountId === selected) && dateInPeriod(payoutDate(item), period)); const withdrawalTotals = payoutSummary(withdrawals);
+  const activeIds = visibleAccountIds(db);
+  const withdrawals = (db.payouts || []).filter((item) => isCompletedPayout(item) && activeIds.has(item.accountId) && (selected === 'all' || item.accountId === selected) && dateInPeriod(payoutDate(item), period)); const withdrawalTotals = payoutSummary(withdrawals);
   const accountName = (id) => db.accounts.find((account) => account.id === id)?.name || 'Conta removida';
   const bestMonth = [...months].sort((a, b) => b.r - a.r)[0]; const worstMonth = [...months].sort((a, b) => a.r - b.r)[0];
   const currentStreak = streaks.currentType === 'win' ? `${streaks.currentCount} ganho(s)` : streaks.currentType === 'loss' ? `${streaks.currentCount} perda(s)` : 'Nenhuma';
@@ -41,7 +43,7 @@ export function renderAnalytics({ db, trades, accounts, selected = 'all', period
       monthly: { values: months.map((item) => item.r), labels: months.map((item) => item.label) },
     },
     html: `<div class="stack">
-      ${periodSelector({ period, count: items.length, id: 'help-analytics-period', help: 'O filtro de período é aplicado a todos os indicadores, gráficos, rankings, ativos, estratégias, custos e comparações desta página. O filtro de conta do topo continua funcionando em conjunto.' })}
+      ${periodSelector({ period, count: items.length, id: 'help-analytics-period', help: 'O filtro de período é aplicado a todos os indicadores, gráficos, rankings, ativos, estratégias, custos e comparações desta página. O filtro de conta do topo continua funcionando em conjunto, e contas arquivadas ficam fora das estatísticas.' })}
       <section class="metric-grid">${helpMetric('R acumulado', signed(stats.r, 'R'), `${stats.count} operações`, 'help-total-r', 'Soma do resultado de todas as operações dividido pelo risco inicial de cada uma. Permite comparar desempenho mesmo quando o valor arriscado muda.')}${helpMetric('R médio', signed(stats.avgR, 'R'), 'Por operação', 'help-average-r', 'Resultado médio por trade medido em unidades de risco. Acima de zero indica vantagem histórica; quanto maior e mais estável, melhor.')}${helpMetric('Profit factor', pf(stats.profitFactor), 'Ganhos ÷ perdas', 'help-analytics-pf', 'Soma dos ganhos líquidos dividida pela soma das perdas líquidas. Acima de 1 é positivo; avalie sempre junto da quantidade de trades.')}${helpMetric('Expectativa', money(stats.expectancyCents), 'Resultado médio por trade', 'help-analytics-expectancy', 'Quanto cada operação produziu em média depois de taxas, comissão e swap. Uma expectativa positiva precisa se manter em uma amostra suficiente.')}</section>
 
       <div class="two-col"><section class="card">${sectionTitle('R acumulado', 'help-r-curve', 'Curva que soma o resultado em R após cada operação. Uma subida relativamente estável indica consistência; quedas longas indicam períodos de perda.')}<canvas id="rChart" role="img" aria-label="Curva de R acumulado"></canvas></section><section class="card">${sectionTitle('PnL acumulado', 'help-pnl-curve', 'Evolução do resultado líquido realizado em dinheiro, já descontando custos, comissão e swap.')}<canvas id="pnlChart" role="img" aria-label="Curva de PnL acumulado"></canvas></section></div>

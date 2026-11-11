@@ -2,15 +2,17 @@ import { equitySeries, evaluateAccountLimits, maxDrawdown, netPnlCents, operatio
 import { dateInPeriod, filterTradesByPeriod, recentComparison, streakStats } from '../domain/analytics.js';
 import { isCompletedPayout, payoutDate, payoutNetCents } from '../domain/payouts.js';
 import { fromCents, money, signed } from '../domain/money.js';
+import { visibleAccountIds, visibleAccountRecords } from '../domain/account-visibility.js';
 import { currency, helpMetric, periodSelector, rfmt, tradeTable, esc } from '../ui/html.js';
 
 const indicator = (label, value, id, help) => `<div class="row detail-item"><span class="indicator-label">${esc(label)}<span class="info-tip"><button class="info-trigger" type="button" aria-label="Ajuda sobre ${esc(label)}" aria-describedby="${esc(id)}">?</button><span class="info-tooltip" id="${esc(id)}" role="tooltip">${esc(help)}</span></span></span><b>${value}</b></div>`;
 
 export function renderDashboard({ db, selected, accountName, period = { mode: 'all', label: 'Todo o período', customFrom: '', customTo: '', invalid: false } }) {
   const accounts = db.accounts.filter((account) => !account.archived && (selected === 'all' || account.id === selected));
-  const allTrades = db.trades.filter((trade) => selected === 'all' || trade.accountId === selected).sort((a, b) => a.closedDate.localeCompare(b.closedDate));
+  const activeIds = visibleAccountIds(db);
+  const allTrades = visibleAccountRecords(db, db.trades, { selected }).sort((a, b) => a.closedDate.localeCompare(b.closedDate));
   const trades = filterTradesByPeriod(allTrades, period);
-  const allFlows = db.cashFlows.filter((flow) => selected === 'all' || flow.accountId === selected);
+  const allFlows = visibleAccountRecords(db, db.cashFlows, { selected });
   const flows = allFlows.filter((flow) => dateInPeriod(flow.date, period));
   const stats = summarize(trades);
   const total = accounts.reduce((sum, account) => sum + operationalBalanceCents(account, db.trades, db.cashFlows), 0);
@@ -20,12 +22,12 @@ export function renderDashboard({ db, selected, accountName, period = { mode: 'a
   const opening = initial + priorTrades + priorFlows;
   const series = equitySeries(trades, flows, opening);
   const observedDrawdownCents = maxDrawdown(equitySeries(trades, [], initial + priorTrades).map((item) => item.value));
-  const payouts = db.payouts.filter((item) => isCompletedPayout(item) && (selected === 'all' || item.accountId === selected) && dateInPeriod(payoutDate(item), period)).reduce((sum, item) => sum + payoutNetCents(item), 0);
+  const payouts = db.payouts.filter((item) => isCompletedPayout(item) && activeIds.has(item.accountId) && (selected === 'all' || item.accountId === selected) && dateInPeriod(payoutDate(item), period)).reduce((sum, item) => sum + payoutNetCents(item), 0);
   const alerts = accounts.flatMap((account) => evaluateAccountLimits(account, db.trades, db.snapshots).warnings.map((warning) => ({ ...warning, account: account.name })));
   const recent = recentComparison(trades, 20); const streaks = streakStats(trades);
   const currentStreak = streaks.currentType === 'win' ? `${streaks.currentCount} ganho(s)` : streaks.currentType === 'loss' ? `${streaks.currentCount} perda(s)` : 'Nenhuma';
-  return { chart: series.map((item) => fromCents(item.value)), html: `<div class="stack"><div class="row"><h2 class="section-title">Visão geral</h2><span class="pill">${selected === 'all' ? 'Todas as contas' : esc(accountName(selected))}</span></div>
-    ${periodSelector({ period, count: trades.length, id: 'help-dashboard-period', help: 'O período altera resultados, R, saques, gráfico e operações do Dashboard. O saldo atual e os alertas de limite permanecem completos para mostrar a situação real das contas.' })}
+  return { chart: series.map((item) => fromCents(item.value)), html: `<div class="stack"><div class="row"><h2 class="section-title">Visão geral</h2><span class="pill">${selected === 'all' ? 'Todas as contas ativas' : esc(accountName(selected))}</span></div>
+    ${periodSelector({ period, count: trades.length, id: 'help-dashboard-period', help: 'O período altera resultados, R, saques, gráfico e operações do Dashboard. Contas arquivadas ficam fora dos indicadores; o saldo atual e os alertas mostram a situação real das contas ativas.' })}
     <section class="metric-grid">${helpMetric('Saldo operacional atual', money(total), 'Não é limitado pelo período', 'help-total-balance', 'Situação real atual das contas: saldo inicial, todos os resultados realizados e movimentações. Este valor não é filtrado por data para não apresentar um capital disponível incorreto.')}${helpMetric('Resultado do período', currency(stats.pnlCents), `${stats.count} operações`, 'help-realized-result', 'Soma do PnL líquido das operações encerradas dentro do período selecionado, descontando taxas, comissão e swap.')}${helpMetric('R do período', rfmt(stats.r), `Média: ${signed(stats.avgR, 'R')} / trade`, 'help-dashboard-r', 'Soma dos resultados em R dentro do período selecionado. Facilita comparar operações com riscos diferentes.')}${helpMetric('Saques líquidos no período', money(payouts), period.label, 'help-payout-total', 'Total que você efetivamente recebeu nos saques do período, depois de aplicar a porcentagem registrada em cada saque.')}</section>
     <div class="row"><h2 class="section-title">Pulso da performance</h2><button class="ghost" data-goto="analytics">Abrir estatísticas →</button></div><section class="metric-grid">${helpMetric('Win rate do período', `${stats.winRate}%`, `${stats.wins} ganhos • ${stats.losses} perdas`, 'help-period-winrate', 'Percentual de operações positivas dentro do período selecionado. Interprete junto do payoff e do R médio, pois uma estratégia pode ser lucrativa mesmo com win rate menor.')}${helpMetric('Expectativa recente', money(recent.recent.expectancyCents), `${recent.count} de 20 trades disponíveis`, 'help-recent-expectancy', 'Resultado líquido médio dos últimos 20 trades existentes dentro do período escolhido. Compare com o histórico completo na aba Estatísticas para identificar melhora ou perda de eficiência.')}${helpMetric('Profit factor recente', recent.recent.profitFactor === Infinity ? '∞' : recent.recent.profitFactor.toFixed(2), 'Até 20 trades do período', 'help-recent-pf', 'Soma dos ganhos dividida pela soma das perdas nos últimos 20 trades existentes dentro do período. Acima de 1 indica resultado líquido positivo nessa janela.')}${helpMetric('Sequência no período', currentStreak, `Máx. perdas: ${streaks.maxLosses}`, 'help-current-streak', 'Quantidade de ganhos ou perdas consecutivos considerando somente as operações do período selecionado.')}</section>
     ${alerts.length ? `<section class="card alerts"><h2 class="section-title">Alertas preventivos</h2>${alerts.map((alert) => `<p class="alert ${alert.level}"><b>${esc(alert.account)}</b> — ${esc(alert.message)}</p>`).join('')}<p class="helper">Sem mark-to-market, os alertas não garantem compliance intradiário.</p></section>` : ''}
