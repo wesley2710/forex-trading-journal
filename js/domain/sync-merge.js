@@ -46,6 +46,8 @@ export function mergeDatabases(local, remote) {
   const tombstones = new Map(tombstoneItems.map((item) => [keyOf(item), item]));
   const output = { ...remote, ...local };
   for (const collection of COLLECTIONS) output[collection] = mergeCollection(local?.[collection], remote?.[collection], collection, tombstones);
+  const accountIds = new Set(output.accounts.map((account) => account.id));
+  for (const collection of ['phases', 'trades', 'cashFlows', 'payouts', 'fees', 'snapshots']) output[collection] = output[collection].filter((item) => !item.accountId || accountIds.has(item.accountId));
   output.audit = mergeCollection(local?.audit, remote?.audit, 'audit', new Map())
     .sort((a, b) => String(a.at || '').localeCompare(String(b.at || ''))).slice(-500);
   output.settings = mergeSettings(local?.settings, remote?.settings, tombstoneItems);

@@ -61,6 +61,10 @@ footer { padding: 0 36px 25px; color: #6d7e97; font-size: 11px; }
 .data-table td:last-child, .data-table th:last-child { padding-right: 0; }
 .actions { display: flex; gap: 6px; }
 .actions button { background: transparent; border: 1px solid #34455a; color: #b9c9dc; border-radius: 7px; padding: 6px 8px; min-height: 34px; }
+.actions button.danger { border-color: #75414d; color: #ff9ca6; }
+.actions button.danger:hover { background: #40232a; border-color: #a55565; }
+.danger-button { border: 1px solid #a55565; color: #fff; background: #8c3547; padding: 12px 17px; border-radius: 9px; font-weight: 750; }
+.danger-button:hover { background: #a84054; }
 .action-wrap { flex-wrap: wrap; margin-top: 15px; }
 .preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .preset-panel { border: 1px solid #2b3b50; background: #0f1a29; border-radius: 11px; padding: 15px; min-width: 0; }

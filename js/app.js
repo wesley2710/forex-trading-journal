@@ -1,5 +1,6 @@
 import { appConfig } from './config.js';
 import { barChart, lineChart } from './charts.js';
+import { accountDeletionSummary, deleteAccountRecords } from './domain/account-deletion.js';
 import { fromCents, money, signed, toCents } from './domain/money.js';
 import { analyticsPeriodRange, filterTradesByPeriod } from './domain/analytics.js';
 import { deletePreset, presetOptions, presetValues, savePreset } from './domain/presets.js';
@@ -93,8 +94,8 @@ function render() {
   refreshSyncStatus();
 }
 
-function modal(title, html, onSubmit, { submit = true } = {}) {
-  $('#modalTitle').textContent = title; $('#formFields').innerHTML = html; $('#formError').textContent = ''; formHandler = onSubmit; $('#entityForm button[type=submit]').hidden = !submit; $('#dialog').showModal();
+function modal(title, html, onSubmit, { submit = true, submitLabel = 'Salvar', submitClass = 'primary' } = {}) {
+  const submitButton = $('#entityForm button[type=submit]'); $('#modalTitle').textContent = title; $('#formFields').innerHTML = html; $('#formError').textContent = ''; formHandler = onSubmit; submitButton.hidden = !submit; submitButton.textContent = submitLabel; submitButton.className = submitClass; $('#dialog').showModal();
 }
 function accountForm(id) {
   const current = db.accounts.find((account) => account.id === id) || { name: '', firm: '', status: 'Ativa', initialBalanceCents: 1000000, profitTargetCents: 100000, dailyLossLimitCents: 50000, maxLossLimitCents: 100000, drawdownType: 'static', lossBasis: 'balance', timezone: 'UTC', rolloverTime: '00:00', profitSplit: 80 };
@@ -209,6 +210,19 @@ async function deleteTrade(tradeId) {
   commit(() => { markDeleted(db, 'trades', tradeId); db.trades = db.trades.filter((item) => item.id !== tradeId); }, 'delete', 'trades');
 }
 
+function deleteAccountForm(accountId) {
+  const account = db.accounts.find((item) => item.id === accountId); if (!account) return toast('Conta não encontrada.');
+  const summary = accountDeletionSummary(db, accountId);
+  const html = `<div class="alert danger field full"><strong>Exclusão permanente</strong><br>Use esta opção somente para contas de teste ou backtest. Para contas com histórico real, prefira arquivar.</div><div class="field full compact-metrics"><div><span>Operações</span><b>${summary.trades}</b></div><div><span>Saques</span><b>${summary.payouts}</b></div><div><span>Movimentações</span><b>${summary.cashFlows}</b></div><div><span>Taxas e snapshots</span><b>${summary.fees + summary.snapshots}</b></div><div><span>Prints no Drive</span><b>${summary.screenshots.length}</b></div></div><p class="helper field full">A conta e todos esses registros serão removidos. Um backup JSON será baixado automaticamente antes da exclusão.${summary.screenshots.length ? ' Os prints também serão apagados do Google Drive.' : ''}</p>` + field('confirmationName', `Digite “${account.name}” para confirmar`, 'text', '', 'required autocomplete="off"', true);
+  modal('Excluir conta definitivamente', html, async (values) => {
+    if (values.confirmationName.trim() !== String(account.name).trim()) throw new Error('Digite exatamente o nome da conta para confirmar.');
+    if (summary.screenshots.length && (!access.connected || !workspace)) throw new Error('Conecte o acesso automático antes de excluir uma conta que possui prints.');
+    download(`forex-journal-backup-antes-excluir-${isoDate()}.json`, JSON.stringify(db, null, 2));
+    for (const screenshot of summary.screenshots) await workspace.deleteScreenshot(screenshot.id);
+    commit(() => { deleteAccountRecords(db, accountId); if (selected === accountId) selected = 'all'; }, 'delete-account', 'accounts');
+  }, { submitLabel: 'Excluir definitivamente', submitClass: 'danger-button' });
+}
+
 function exportCsv() { const columns = ['closedDate', 'accountId', 'symbol', 'side', 'entry', 'stopLoss', 'takeProfit', 'exit', 'lots', 'riskCents', 'plannedRewardCents', 'grossPnlCents', 'feesCents', 'swapCents', 'commissionCents', 'netPnlCents', 'strategy', 'notes']; const rows = [columns.join(','), ...db.trades.map((trade) => columns.map((key) => `"${String(trade[key] ?? '').replace(/"/g, '""')}"`).join(','))]; download('forex-trades.csv', `\ufeff${rows.join('\r\n')}`, 'text/csv;charset=utf-8'); }
 function bindImport() { const input = $('#importFile'); if (!input) return; input.onchange = async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const imported = validateImport(JSON.parse(await file.text())); reconcilePayoutCashFlows(imported); if (confirm('Substituir todos os dados locais pelo backup validado?')) { db = localRepository.replace(imported); selected = 'all'; toast('Backup importado.'); render(); } } catch (error) { alert(error.message); } }; }
 
@@ -222,7 +236,7 @@ $('#entityForm').onsubmit = async (event) => {
     await formHandler(values); $('#dialog').close();
   } catch (error) { $('#formError').textContent = error.message; } finally { submit.disabled = false; }
 };
-$('#dialog').addEventListener('close', () => { galleryUrls.forEach((url) => URL.revokeObjectURL(url)); galleryUrls = []; $('#entityForm button[type=submit]').hidden = false; formHandler = null; });
+$('#dialog').addEventListener('close', () => { galleryUrls.forEach((url) => URL.revokeObjectURL(url)); galleryUrls = []; const submit = $('#entityForm button[type=submit]'); submit.hidden = false; submit.textContent = 'Salvar'; submit.className = 'primary'; formHandler = null; });
 $('#dialog').addEventListener('click', async (event) => {
   const button = event.target.closest('[data-action="delete-screenshot"]'); if (!button) return;
   if (!confirm('Excluir este print do Google Drive?')) return;
@@ -247,6 +261,7 @@ $('#app').addEventListener('click', async (event) => {
   try {
     if (action === 'new-account') accountForm(); else if (action === 'edit-account') accountForm(id); else if (action === 'toggle-archived') { showArchived = !showArchived; render(); }
     else if (action === 'archive-account') commit(() => { const account = db.accounts.find((item) => item.id === id); account.archived = !account.archived; account.updatedAt = new Date().toISOString(); account.version = Number(account.version || 0) + 1; }, 'archive-toggle', 'accounts');
+    else if (action === 'delete-account') deleteAccountForm(id);
     else if (action === 'cash-flow') cashFlowForm(id); else if (action === 'account-increase') accountIncreaseForm(id); else if (action === 'edit-account-increase') accountIncreaseForm('', id); else if (action === 'delete-account-increase' && confirm('Excluir este aumento e retirar o valor correspondente do saldo atual?')) commit(() => { markDeleted(db, 'cashFlows', id); db.cashFlows = db.cashFlows.filter((flow) => flow.id !== id); }, 'delete-account-increase', 'cashFlows'); else if (action === 'fee') feeForm(id); else if (action === 'withdrawal') payoutForm(id); else if (action === 'edit-payout') payoutForm('', id); else if (action === 'delete-payout' && confirm('Excluir este saque e restaurar o valor bruto ao saldo atual?')) commit(() => { const flowIds = db.cashFlows.filter((flow) => flow.id === payoutCashFlowId(id) || (flow.source === 'payout' && flow.sourceId === id)).map((flow) => flow.id); markDeleted(db, 'payouts', id); flowIds.forEach((flowId) => markDeleted(db, 'cashFlows', flowId)); db.payouts = db.payouts.filter((item) => item.id !== id); db.cashFlows = db.cashFlows.filter((flow) => !flowIds.includes(flow.id)); }, 'delete', 'payouts'); else if (action === 'snapshot') snapshotForm(id);
     else if (action === 'new-trade') tradeForm(); else if (action === 'edit-trade') tradeForm(id); else if (action === 'view-screenshots') await showScreenshots(id); else if (action === 'delete-trade') await deleteTrade(id);
     else if (action === 'add-preset') presetForm(button.dataset.kind);

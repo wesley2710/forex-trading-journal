@@ -23,6 +23,7 @@ test('interface de contas e operações não exibe fases legadas', async () => {
   assert.doesNotMatch(accountsHtml, /Avaliação|Nova fase|data-action="phase"/);
   assert.doesNotMatch(accountsHtml, /Sem preços em tempo real|conformidade com regras da mesa/);
   assert.match(accountsHtml, /data-action="withdrawal"/);
+  assert.match(accountsHtml, /data-action="delete-account"/);
   assert.doesNotMatch(tradesHtml, />Fase<|data-filter="phase"/);
   assert.doesNotMatch(appSource, /selectField\('phaseId'|function phaseForm/);
 });
